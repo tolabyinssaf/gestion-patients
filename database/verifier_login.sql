@@ -22,30 +22,32 @@ SET time_zone = "+00:00";
 --
 
 DELIMITER $$
---
--- Procédures
---
-CREATE DEFINER=`root`@`localhost` PROCEDURE `verifier_login` (IN `p_email` VARCHAR(50), IN `p_mdp` VARCHAR(255))   BEGIN
-    DECLARE v_count INT;
 
-    -- Vérifier dans les utilisateurs
-    SELECT COUNT(*) INTO v_count 
-    FROM utilisateurs
+CREATE PROCEDURE verifier_login_patient(
+    IN p_email VARCHAR(50),
+    IN p_mdp VARCHAR(255)
+)
+BEGIN
+    DECLARE v_exist INT;
+
+    SELECT COUNT(*) INTO v_exist
+    FROM patients
     WHERE email = p_email AND mot_de_passe = p_mdp;
 
-    IF v_count = 0 THEN
-        -- Vérifier dans les patients
-        SELECT COUNT(*) INTO v_count 
-        FROM patients
-        WHERE email = p_email AND mot_de_passe = p_mdp;
-
-        IF v_count = 0 THEN
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Email ou mot de passe incorrect';
-        END IF;
+    IF v_exist = 0 THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Email ou mot de passe incorrect';
     END IF;
+
+   
+    SELECT * FROM patients WHERE email = p_email AND mot_de_passe = p_mdp;
 END$$
 
 DELIMITER ;
+
+
+
+
+
 
 -- --------------------------------------------------------
 

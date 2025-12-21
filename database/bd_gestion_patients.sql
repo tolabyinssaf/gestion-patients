@@ -3,11 +3,15 @@
 -- https://www.phpmyadmin.net/
 --
 -- Hôte : 127.0.0.1
+<<<<<<< HEAD
 
 -- Généré le : jeu. 18 déc. 2025 à 23:26
 
 -- Généré le : ven. 19 déc. 2025 à 00:29
 
+=======
+-- Généré le : ven. 19 déc. 2025 à 00:29
+>>>>>>> fe4ed0e5a930336008b047a7ddbb565db2827203
 -- Version du serveur : 10.4.32-MariaDB
 -- Version de PHP : 8.2.12
 
@@ -47,7 +51,10 @@ CREATE TABLE `admissions` (
 INSERT INTO `admissions` (`id_admission`, `id_patient`, `date_admission`, `service`, `motif`, `status`) VALUES
 (1, 1, '2025-12-18', 'A', 'Check-up', 'En cours');
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> fe4ed0e5a930336008b047a7ddbb565db2827203
 -- --------------------------------------------------------
 
 --
@@ -120,7 +127,10 @@ CREATE TABLE `utilisateurs` (
   `role` enum('patient','admin','medecin') DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+<<<<<<< HEAD
  
+=======
+>>>>>>> fe4ed0e5a930336008b047a7ddbb565db2827203
 --
 -- Index pour les tables déchargées
 --
@@ -133,7 +143,10 @@ ALTER TABLE `admissions`
   ADD KEY `id_patient` (`id_patient`);
 
 --
+<<<<<<< HEAD
 
+=======
+>>>>>>> fe4ed0e5a930336008b047a7ddbb565db2827203
 -- Index pour la table `patients`
 --
 ALTER TABLE `patients`
@@ -160,7 +173,10 @@ ALTER TABLE `utilisateurs`
   ADD PRIMARY KEY (`id_user`);
 
 --
+<<<<<<< HEAD
 
+=======
+>>>>>>> fe4ed0e5a930336008b047a7ddbb565db2827203
 -- AUTO_INCREMENT pour les tables déchargées
 --
 
@@ -171,7 +187,10 @@ ALTER TABLE `admissions`
   MODIFY `id_admission` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
+<<<<<<< HEAD
 
+=======
+>>>>>>> fe4ed0e5a930336008b047a7ddbb565db2827203
 -- AUTO_INCREMENT pour la table `patients`
 --
 ALTER TABLE `patients`
@@ -196,7 +215,10 @@ ALTER TABLE `utilisateurs`
   MODIFY `id_user` int(11) NOT NULL AUTO_INCREMENT;
 
 --
+<<<<<<< HEAD
 
+=======
+>>>>>>> fe4ed0e5a930336008b047a7ddbb565db2827203
 -- Contraintes pour les tables déchargées
 --
 
@@ -217,7 +239,10 @@ ALTER TABLE `suivis`
 --
 ALTER TABLE `traitements`
   ADD CONSTRAINT `traitements_ibfk_1` FOREIGN KEY (`id_patient`) REFERENCES `patients` (`id_patient`);
+<<<<<<< HEAD
 
+=======
+>>>>>>> fe4ed0e5a930336008b047a7ddbb565db2827203
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
