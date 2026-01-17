@@ -1,6 +1,6 @@
 <?php
 session_start();
-include("../config/connexion.php"); 
+include("../config/connexion.php");
 
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'medecin') {
     header("Location: login.php");
@@ -8,276 +8,280 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'medecin') {
 }
 
 $user_id = $_SESSION['user_id'];
-$message = "";
-$form_message = "";
-
-// ====== Récupérer infos médecin ======
 $stmt = $pdo->prepare("SELECT nom, prenom, email FROM utilisateurs WHERE id_user = ?");
 $stmt->execute([$user_id]);
 $medecin = $stmt->fetch(PDO::FETCH_ASSOC);
 
-// Nombre total de patients
 $stmt2 = $pdo->prepare("SELECT COUNT(*) AS total_patients FROM patients WHERE id_medecin = ?");
 $stmt2->execute([$user_id]);
 $total_patients = $stmt2->fetch(PDO::FETCH_ASSOC)['total_patients'];
 
-// Derniers suivis (5 derniers)
-$stmt3 = $pdo->prepare("SELECT p.nom, p.prenom, s.date_suivi, s.commentaire
-                        FROM suivis s
-                        JOIN patients p ON s.id_patient = p.id_patient
-                        WHERE p.id_medecin = ?
-                        ORDER BY s.date_suivi DESC
-                        LIMIT 5");
-$stmt3->execute([$user_id]);
-$derniers_suivis = $stmt3->fetchAll(PDO::FETCH_ASSOC);
-
-// ====== AJOUT PATIENT ======
-if (isset($_POST['ajouter'])) {
-    $nom = $_POST['nom'];
-    $prenom = $_POST['prenom'];
-    $date_naissance = $_POST['date_naissance'];
-    $sexe = $_POST['sexe'];
-    $adresse = $_POST['adresse'];
-    $telephone = $_POST['telephone'];
-    $email = $_POST['email'];
-    $date_inscription = date('Y-m-d');
-
-    try {
-        $stmt = $pdo->prepare("INSERT INTO patients 
-            (nom, prenom, date_naissance, sexe, adresse, telephone, email, date_inscription, id_medecin)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-        $stmt->execute([$nom, $prenom, $date_naissance, $sexe, $adresse, $telephone, $email, $date_inscription, $user_id]);
-        $message = "Patient ajouté avec succès";
-    } catch (PDOException $e) {
-        if (strpos($e->getMessage(), "Duplicate entry") !== false && strpos($e->getMessage(), "email") !== false) {
-            $form_message = "Email déjà utilisé";
-        } else {
-            $form_message = "Erreur lors de l'ajout";
-        }
-    }
-}
-
-// ====== MODIFIER PATIENT ======
-if (isset($_POST['modifier'])) {
-    $id_patient = $_POST['id_patient'];
-    $nom = $_POST['nom'];
-    $prenom = $_POST['prenom'];
-    $date_naissance = $_POST['date_naissance'];
-    $sexe = $_POST['sexe'];
-    $adresse = $_POST['adresse'];
-    $telephone = $_POST['telephone'];
-    $email = $_POST['email'];
-
-    try {
-        $stmt = $pdo->prepare("UPDATE patients 
-            SET nom = ?, prenom = ?, date_naissance = ?, sexe = ?, adresse = ?, telephone = ?, email = ? 
-            WHERE id_patient = ? AND id_medecin = ?");
-        $stmt->execute([$nom, $prenom, $date_naissance, $sexe, $adresse, $telephone, $email, $id_patient, $user_id]);
-        $message = "Patient modifié avec succès";
-    } catch (PDOException $e) {
-        if (strpos($e->getMessage(), "Duplicate entry") !== false && strpos($e->getMessage(), "email") !== false) {
-            $form_message = "Email déjà utilisé";
-            $edit_patient = ['id_patient'=>$id_patient, 'nom'=>$nom, 'prenom'=>$prenom, 'date_naissance'=>$date_naissance,
-                             'sexe'=>$sexe, 'adresse'=>$adresse, 'telephone'=>$telephone, 'email'=>$email];
-        } else {
-            $form_message = "Erreur lors de la modification";
-        }
-    }
-}
-
-// ====== SUPPRIMER PATIENT ======
-if (isset($_GET['supprimer'])) {
-    $id_patient = $_GET['supprimer'];
-    $stmt = $pdo->prepare("DELETE FROM patients WHERE id_patient = ? AND id_medecin = ?");
-    $stmt->execute([$id_patient, $user_id]);
-}
-
-// ====== RECHERCHE OU LISTE COMPLETE ======
 $search = $_GET['search'] ?? '';
-
 if ($search) {
-    $stmt = $pdo->prepare("SELECT * FROM patients 
-        WHERE id_medecin = ? AND (nom LIKE ? OR prenom LIKE ?)
-        ORDER BY nom ASC");
-    $stmt->execute([$user_id, "%$search%", "%$search%"]);
+   $stmt = $pdo->prepare("SELECT * FROM patients WHERE id_medecin = ? AND (cin LIKE ? OR nom LIKE ? OR prenom LIKE ?) ORDER BY nom ASC");
+   $stmt->execute([$user_id, "%$search%", "%$search%", "%$search%"]);
 } else {
     $stmt = $pdo->prepare("SELECT * FROM patients WHERE id_medecin = ? ORDER BY nom ASC");
     $stmt->execute([$user_id]);
 }
-
 $patients = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-// ====== SI ÉDITION ======
-$edit_patient = null;
-if (isset($_GET['edit'])) {
-    $stmt_edit = $pdo->prepare("SELECT * FROM patients WHERE id_patient = ? AND id_medecin = ?");
-    $stmt_edit->execute([$_GET['edit'], $user_id]);
-    $edit_patient = $stmt_edit->fetch(PDO::FETCH_ASSOC);
-}
 ?>
 
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8">
-<title>Mes patients</title>
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+    <meta charset="UTF-8">
+    <title>MedCare | Gestion des Patients</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
 <style>
-body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f9f9f9; margin:0; padding:0; }
-header { background: #01A28C; color:white; padding:20px; text-align:center; }
-header h1 { margin:0; font-size:24px; }
-header p { margin:5px 0 0 0; color:#f0f0f0; }
-nav { background:white; padding:10px 20px; display:flex; gap:15px; box-shadow:0 2px 5px rgba(0,0,0,0.1);}
-nav a { text-decoration:none; color:#737978; font-weight:500; display:flex; align-items:center; gap:5px; transition:0.3s;}
-nav a:hover { color:#01A28C; }
-.container { padding:20px; max-width:1200px; margin:auto; }
-.message { color:red; font-weight:bold; margin-bottom:20px; }
-.form-container { background:white; padding:25px; border-radius:12px; box-shadow:0 4px 15px rgba(0,0,0,0.1); margin-bottom:30px; display:none; }
-.form-container h2 { color:#01A28C; }
-.form-container input, .form-container select { width:100%; padding:10px; margin-bottom:12px; border:1px solid #ccc; border-radius:6px; }
-.form-container button { padding:10px 20px; background:#01A28C; color:white; border:none; border-radius:6px; cursor:pointer; font-weight:600; }
-.form-container button:hover { background:#018f7a; }
-#addPatientBtn { margin-bottom:20px; padding:12px 20px; background:#01A28C; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:600; }
-#addPatientBtn:hover { background:#018f7a; }
-.search-box input { padding:8px; width:250px; border-radius:6px; border:1px solid #ccc; }
-.search-box button { padding:8px 14px; margin-left:5px; border:none; border-radius:6px; background:#01A28C; color:white; cursor:pointer; }
-.search-box button:hover { background:#018f7a; }
-table { width:100%; border-collapse:collapse; background:white; border-radius:12px; overflow:hidden; box-shadow:0 4px 15px rgba(0,0,0,0.08); }
-th, td { padding:14px; text-align:left; }
-th { background:#01A28C; color:white; }
-tr:hover { background:#f1f1f1; }
-.action-btn { padding:6px 10px; border-radius:6px; margin-right:5px; font-size:14px; display:inline-flex; align-items:center; gap:4px; text-decoration:none; color:white; }
-.action-btn.edit { background:#ffc107; }
-.action-btn.edit:hover { background:#e0a800; }
-.action-btn.delete { background:#dc3545; }
-.action-btn.delete:hover { background:#c82333; }
-.action-btn.view { background:#01A28C; }
-.action-btn.view:hover { background:#018f7a; }
-.no-patient { font-style:italic; color:#737978; margin-top:10px; }
+    :root {
+        --primary: #0f766e; 
+        --primary-light: #f0fdfa;
+        --primary-hover: #115e59;
+        --sidebar-bg: #0f172a;
+        --bg-body: #f8fafc;
+        --text-main: #1e293b;
+        --text-muted: #64748b;
+        --white: #ffffff;
+        --border: #e2e8f0;
+    }
+
+    * { margin:0; padding:0; box-sizing:border-box; font-family: 'Inter', sans-serif; }
+    body { background: var(--bg-body); color: var(--text-main); }
+
+    /* ===== HEADER ===== */
+    header {
+        background: var(--white);
+        padding: 0 40px;
+        height: 75px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid var(--border);
+        position: sticky; top: 0; z-index: 100;
+    }
+    .logo { height: 45px; }
+    .user-pill {
+        background: var(--primary-light);
+        padding: 8px 18px;
+        border-radius: 12px;
+        display: flex; align-items: center; gap: 10px;
+        font-size: 14px; font-weight: 600; color: var(--primary);
+        border: 1px solid rgba(15, 118, 110, 0.1);
+    }
+
+    /* ===== LAYOUT ===== */
+    .container { display: flex; min-height: calc(100vh - 75px); }
+
+    /* ===== SIDEBAR ===== */
+    .sidebar { width: 260px; background: var(--sidebar-bg); padding: 24px 16px; flex-shrink: 0; }
+    .sidebar h3 {
+        color: rgba(255,255,255,0.3); font-size: 11px; 
+        text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 20px; padding-left: 12px;
+    }
+    .sidebar a {
+        display: flex; align-items: center; gap: 12px;
+        color: #94a3b8; text-decoration: none;
+        padding: 12px 16px; border-radius: 10px;
+        margin-bottom: 5px; transition: 0.2s;
+    }
+    .sidebar a:hover { background: rgba(255,255,255,0.05); color: #fff; }
+    .sidebar a.active { background: var(--primary); color: #fff; }
+
+    /* ===== CONTENT ===== */
+    .content { flex: 1; padding: 40px; }
+    .page-header { margin-bottom: 30px; }
+    .page-header h1 { font-size: 28px; font-weight: 700; color: var(--text-main); }
+    .subtitle { color: var(--text-muted); font-size: 15px; }
+
+    /* STATS */
+    .stat-pill {
+        display: inline-flex; align-items: center; gap: 8px;
+        background: var(--white); padding: 10px 20px;
+        border-radius: 50px; border: 1px solid var(--border);
+        margin-bottom: 30px; font-weight: 500; font-size: 14px;
+    }
+    .stat-pill b { color: var(--primary); font-size: 16px; }
+
+    /* ===== BARRE DE RECHERCHE ===== */
+    .top-actions {
+        display: flex; justify-content: space-between; align-items: center;
+        margin-bottom: 25px; gap: 20px;
+    }
+    
+    .search-wrapper { flex: 1; max-width: 500px; position: relative; }
+    .search-wrapper form {
+        display: flex; align-items: center;
+        background: var(--white);
+        border-radius: 14px;
+        border: 1px solid var(--border);
+        overflow: hidden;
+        transition: all 0.3s ease;
+    }
+    .search-wrapper i { margin-left: 18px; color: var(--text-muted); }
+    .search-wrapper input {
+        border: none; padding: 14px 15px; width: 100%; outline: none;
+        font-size: 14px; color: var(--text-main);
+    }
+    .search-wrapper button {
+        background: var(--primary); color: white; border: none;
+        padding: 10px 20px; margin-right: 5px; border-radius: 10px;
+        cursor: pointer; font-weight: 600; font-size: 13px;
+    }
+
+    .add-btn {
+        background: var(--primary); color: #fff; padding: 14px 24px;
+        border-radius: 14px; text-decoration: none; font-weight: 600;
+        font-size: 14px; display: flex; align-items: center; gap: 10px;
+        box-shadow: 0 4px 12px rgba(15, 118, 110, 0.2); transition: 0.3s;
+    }
+
+    /* TABLE SECTION */
+    .section { background: var(--white); border-radius: 20px; border: 1px solid var(--border); overflow: hidden; }
+    table { width: 100%; border-collapse: collapse; }
+    th { background: #fcfcfd; padding: 18px 24px; text-align: left; font-size: 12px; color: var(--text-muted); text-transform: uppercase; border-bottom: 1px solid var(--border); }
+    td { padding: 18px 24px; border-bottom: 1px solid var(--border); font-size: 14px; color: var(--text-main); }
+    tr:hover { background: #fafafa; }
+
+    /* BADGES & STATUS */
+    .badge-f { background: #fdf2f8; color: #be185d; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+    .badge-m { background: #eff6ff; color: #1d4ed8; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+    
+    .blood-pill { background: #fee2e2; color: #dc2626; padding: 4px 10px; border-radius: 6px; font-weight: 800; font-size: 12px; border: 1px solid #fecaca; }
+    
+    .status-pill { padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+    .st-stable { background: #dcfce7; color: #15803d; }
+    .st-urgent { background: #fef2f2; color: #dc2626; }
+    .st-obs { background: #fef9c3; color: #a16207; }
+
+    /* ACTIONS */
+    .btn-group { display: flex; gap: 10px; }
+    .btn-action { height: 38px; padding: 0 15px; border-radius: 10px; text-decoration: none; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; transition: 0.2s; }
+    .btn-dossier { background: var(--primary-light); color: var(--primary); }
+    .btn-delete { background: #fff1f2; color: #e11d48; }
+
+    @media(max-width:900px){ .sidebar { display:none; } }
 </style>
 </head>
+
 <body>
 
 <header>
-<h1>Bienvenue Dr. <?= htmlspecialchars($medecin['prenom'] . " " . $medecin['nom']) ?></h1>
-<p>Email : <?= htmlspecialchars($medecin['email']) ?></p>
+    <img src="../images/logo_app2.png" alt="Logo" class="logo">
+    <div class="user-pill">
+        <i class="fa-solid fa-user-md"></i>
+        <span>Dr. <?= htmlspecialchars($medecin['prenom']." ".$medecin['nom']) ?></span>
+    </div>
 </header>
 
-<nav>
-<a href="dashboard_medecin.php"><i class="bi bi-house-door-fill"></i> Accueil</a>
-<a href="patients.php"><i class="bi bi-people-fill"></i> Mes patients</a>
-<a href="suivis.php"><i class="bi bi-journal-medical"></i> Suivis</a>
-<a href="traitements.php"><i class="bi bi-capsule"></i> Traitements</a>
-<a href="rendezvous.php"><i class="bi bi-calendar-check-fill"></i> Rendez-vous</a>
-<a href="deconnexion.php"><i class="bi bi-box-arrow-right"></i> Déconnexion</a>
-</nav>
-
 <div class="container">
-<h2>Résumé</h2>
-<p>Nombre total de patients : <?= $total_patients ?></p>
+    <aside class="sidebar">
+        <h3>Menu Médical</h3>
+        <a href="dashboard_medecin.php"><i class="fa-solid fa-chart-pie"></i> Tableau de bord</a>
+        <a href="patients.php" class="active"><i class="fa-solid fa-user-group"></i> Mes Patients</a>
+        <a href="suivis.php"><i class="fa-solid fa-file-medical"></i> Consultations</a>
+        <a href="../traitement/list.php"><i class="fa-solid fa-pills"></i> Traitements</a>
+        <a href="rendezvous.php"><i class="fa-solid fa-calendar-check"></i> Rendez-vous</a>
+        <div style="height: 1px; background: rgba(255,255,255,0.1); margin: 20px 0;"></div>
+        <a href="profil_medcin.php"><i class="fa-solid fa-user"></i> Profil</a>
+        <a href="deconnexion.php" style="color: #fda4af;"><i class="fa-solid fa-power-off"></i> Déconnexion</a>
+    </aside>
 
-<h1>Mes patients</h1>
+    <main class="content">
+        <div class="page-header">
+            <h1>Répertoire des Patients</h1>
+            <p class="subtitle">Consultez et gérez les informations médicales de vos patients.</p>
+        </div>
 
-<?php if(!empty($message)): ?>
-<p id="message" class="message"><?= htmlspecialchars($message) ?></p>
-<?php endif; ?>
+        <div class="stat-pill">
+            <i class="fa-solid fa-users-viewfinder"></i>
+            Total : <b><?= $total_patients ?></b> patients enregistrés
+        </div>
 
-<form method="GET" class="search-box" id="searchForm">
-<input type="text" name="search" placeholder="Rechercher un patient..." value="<?= htmlspecialchars($search) ?>" id="searchInput">
-<button type="submit"><i class="bi bi-search"></i> Rechercher</button>
-</form>
+        <div class="top-actions">
+            <div class="search-wrapper">
+                <form method="GET">
+                    <i class="fa-solid fa-search"></i>
+                    <input type="text" name="search" placeholder="Rechercher par nom, prénom ou CIN..." value="<?= htmlspecialchars($search) ?>">
+                    <button type="submit">Rechercher</button>
+                </form>
+            </div>
+            <a href="ajouter_patient.php" class="add-btn">
+                <i class="fa-solid fa-plus-circle"></i> Nouveau Patient
+            </a>
+        </div>
 
-<button id="addPatientBtn"><i class="bi bi-plus-lg"></i> Ajouter un patient</button>
-
-<div class="form-container" id="patientForm" style="display: <?= $edit_patient || !empty($form_message) ? 'block' : 'none' ?>;">
-<h2><?= $edit_patient ? 'Modifier patient' : 'Ajouter un patient' ?></h2>
-<form method="POST" id="formPatient">
-<input type="hidden" name="id_patient" value="<?= $edit_patient['id_patient'] ?? '' ?>">
-
-<?php if(!empty($form_message)): ?>
-<div style="color:red; font-weight:bold; margin-bottom:10px;">
-    <?= htmlspecialchars($form_message) ?>
+        <div class="section">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Identité du Patient</th>
+                        <th>Sexe</th>
+                        <th>Groupe</th>
+                        <th>Statut</th>
+                        <th>Email / Contact</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php if($patients): ?>
+                        <?php foreach($patients as $p): ?>
+                        <tr>
+                            <td>
+                                <div style="font-weight: 700;"><?= htmlspecialchars($p['nom']." ".$p['prenom']) ?></div>
+                                <div style="font-size: 11px; color: var(--text-muted);">CIN : <?= htmlspecialchars($p['cin'] ?? 'N/A') ?></div>
+                            </td>
+                            <td>
+                                <?php if(strtoupper($p['sexe']) == 'F'): ?>
+                                    <span class="badge-f"><i class="fa-solid fa-venus"></i> Femme</span>
+                                <?php else: ?>
+                                    <span class="badge-m"><i class="fa-solid fa-mars"></i> Homme</span>
+                                <?php endif; ?>
+                            </td>
+                            <td>
+                                <span class="blood-pill"><?= htmlspecialchars($p['groupe_sanguin'] ?: 'N/A') ?></span>
+                            </td>
+                            <td>
+                                <?php 
+                                    $st_class = 'st-stable';
+                                    $st_text = $p['statut'] ?: 'Stable';
+                                    if(strpos(strtolower($st_text), 'urgent') !== false) $st_class = 'st-urgent';
+                                    if(strpos(strtolower($st_text), 'obs') !== false) $st_class = 'st-obs';
+                                ?>
+                                <span class="status-pill <?= $st_class ?>"><?= htmlspecialchars($st_text) ?></span>
+                            </td>
+                            <td style="color: var(--text-muted); font-size: 13px;">
+                                <i class="fa-regular fa-envelope" style="margin-right: 5px;"></i><?= htmlspecialchars($p['email']) ?>
+                            </td>
+                            <td>
+                                <div class="btn-group">
+                                    <a href="dossier_patient.php?id=<?= $p['id_patient'] ?>" class="btn-action btn-dossier">
+                                        <i class="fa-solid fa-file-waveform"></i> Dossier
+                                    </a>
+                                    <a href="supprimer_patient.php?id=<?= $p['id_patient'] ?>" class="btn-action btn-delete" 
+                                       onclick="return confirm('Confirmez-vous la suppression de ce patient ?')">
+                                        <i class="fa-solid fa-trash"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <tr>
+                            <td colspan="6" style="text-align:center; padding: 60px; color: var(--text-muted);">
+                                <i class="fa-solid fa-folder-open" style="font-size: 30px; display: block; margin-bottom: 10px; opacity: 0.3;"></i>
+                                Aucun patient trouvé.
+                            </td>
+                        </tr>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+    </main>
 </div>
-<?php endif; ?>
-
-<?php
-// Pré-remplissage des champs
-$nom_val = $_POST['nom'] ?? ($edit_patient['nom'] ?? '');
-$prenom_val = $_POST['prenom'] ?? ($edit_patient['prenom'] ?? '');
-$date_naissance_val = $_POST['date_naissance'] ?? ($edit_patient['date_naissance'] ?? '');
-$sexe_val = $_POST['sexe'] ?? ($edit_patient['sexe'] ?? '');
-$adresse_val = $_POST['adresse'] ?? ($edit_patient['adresse'] ?? '');
-$telephone_val = $_POST['telephone'] ?? ($edit_patient['telephone'] ?? '');
-$email_val = $_POST['email'] ?? ($edit_patient['email'] ?? '');
-?>
-
-<input type="text" name="nom" placeholder="Nom" value="<?= htmlspecialchars($nom_val) ?>" required>
-<input type="text" name="prenom" placeholder="Prénom" value="<?= htmlspecialchars($prenom_val) ?>" required>
-<input type="date" name="date_naissance" value="<?= htmlspecialchars($date_naissance_val) ?>" required>
-<select name="sexe" required>
-<option value="Homme" <?= $sexe_val=='Homme'?'selected':'' ?>>Homme</option>
-<option value="Femme" <?= $sexe_val=='Femme'?'selected':'' ?>>Femme</option>
-</select>
-<input type="text" name="adresse" placeholder="Adresse" value="<?= htmlspecialchars($adresse_val) ?>" required>
-<input type="text" name="telephone" placeholder="Téléphone" value="<?= htmlspecialchars($telephone_val) ?>" required>
-<input type="email" name="email" placeholder="Email" value="<?= htmlspecialchars($email_val) ?>" required>
-
-<button type="submit" name="<?= $edit_patient ? 'modifier' : 'ajouter' ?>">
-<i class="bi bi-check-circle-fill"></i> <?= $edit_patient ? 'Modifier' : 'Ajouter' ?></button>
-</form>
-</div>
-
-<?php if(count($patients)>0): ?>
-<table>
-<thead>
-<tr>
-<th>ID</th><th>Nom</th><th>Prénom</th><th>Date de naissance</th><th>Sexe</th><th>Adresse</th><th>Téléphone</th><th>Email</th><th>Actions</th>
-</tr>
-</thead>
-<tbody>
-<?php foreach($patients as $p): ?>
-<tr>
-<td><?= $p['id_patient'] ?></td>
-<td><?= htmlspecialchars($p['nom']) ?></td>
-<td><?= htmlspecialchars($p['prenom']) ?></td>
-<td><?= $p['date_naissance'] ?></td>
-<td><?= $p['sexe'] ?></td>
-<td><?= htmlspecialchars($p['adresse']) ?></td>
-<td><?= htmlspecialchars($p['telephone']) ?></td>
-<td><?= htmlspecialchars($p['email']) ?></td>
-<td>
-<a href="?edit=<?= $p['id_patient'] ?>" class="action-btn edit"><i class="bi bi-pencil-fill"></i> Modifier</a>
-<a href="?supprimer=<?= $p['id_patient'] ?>" onclick="return confirm('Voulez-vous vraiment supprimer ce patient ?')" class="action-btn delete"><i class="bi bi-trash-fill"></i> Supprimer</a>
-<a href="dossier_patient.php?id=<?= $p['id_patient'] ?>" class="action-btn view"><i class="bi bi-eye-fill"></i> Voir dossier</a>
-</td>
-</tr>
-<?php endforeach; ?>
-</tbody>
-</table>
-<?php else: ?>
-<p class="no-patient">Aucun patient trouvé.</p>
-<?php endif; ?>
-</div>
-
-<script>
-const addBtn = document.getElementById('addPatientBtn');
-const formContainer = document.getElementById('patientForm');
-const form = document.getElementById('formPatient');
-
-addBtn.addEventListener('click', () => {
-    formContainer.style.display = 'block';
-    form.reset();
-});
-
-const message = document.getElementById('message');
-const inputs = document.querySelectorAll('input, select');
-inputs.forEach(input => input.addEventListener('input', ()=> message.textContent=''));
-
-document.getElementById('searchForm').addEventListener('submit', ()=>{
-    setTimeout(()=>{document.getElementById('searchInput').value='';}, 50);
-});
-</script>
 
 </body>
 </html>
