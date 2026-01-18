@@ -8,8 +8,6 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'medecin') {
 }
 
 $user_id = $_SESSION['user_id'];
-
-// --- GESTION DE LA DATE (AGENDA) ---
 $date_selectionnee = isset($_GET['date_filtre']) ? $_GET['date_filtre'] : date('Y-m-d');
 
 // 1. Infos médecin
@@ -17,7 +15,8 @@ $stmt = $pdo->prepare("SELECT nom, prenom FROM utilisateurs WHERE id_user = ?");
 $stmt->execute([$user_id]);
 $medecin = $stmt->fetch(PDO::FETCH_ASSOC);
 
-// 2. STATS CLINIQUES : Patients hospitalisés
+// 2. STATS : Patients réellement présents à CETTE DATE précise
+// Un patient est présent si sa date d'admission <= date_filtre ET (date_sortie est NULL OU >= date_filtre)
 $stmt_hosp = $pdo->prepare("
     SELECT COUNT(*) as total 
     FROM admissions 
@@ -28,24 +27,29 @@ $stmt_hosp = $pdo->prepare("
 $stmt_hosp->execute([$user_id, $date_selectionnee, $date_selectionnee]);
 $patients_admis = $stmt_hosp->fetch(PDO::FETCH_ASSOC)['total'];
 
-// 3. STATS ACTIVITÉ : Suivis faits
+// 3. STATS : Suivis réalisés à CETTE DATE
 $stmt_today = $pdo->prepare("
     SELECT COUNT(*) as total 
-    FROM suivis s 
-    JOIN patients p ON s.id_patient = p.id_patient 
-    WHERE s.id_medecin = ? AND DATE(s.date_suivi) = ?
+    FROM suivis 
+    WHERE id_medecin = ? AND DATE(date_suivi) = ?
 ");
 $stmt_today->execute([$user_id, $date_selectionnee]);
 $suivis_jour = $stmt_today->fetch(PDO::FETCH_ASSOC)['total'];
 
-// 4. LISTE DES ACTIVITÉS SELON LA DATE (Correction de la colonne id_chambre)
+// 4. LISTE DES ACTIVITÉS : On récupère le numéro de chambre réel
 $stmt_act = $pdo->prepare("
-    SELECT p.nom, p.prenom, s.date_suivi, s.commentaire, a.id_chambre, a.statut as etat_patient, p.id_patient
+    SELECT 
+        p.nom, p.prenom, p.id_patient,
+        s.date_suivi, s.commentaire, 
+        c.numero_chambre, 
+        a.type_admission as etat_patient
     FROM suivis s
     JOIN patients p ON s.id_patient = p.id_patient
+    -- On cherche l'admission active au moment du suivi
     LEFT JOIN admissions a ON p.id_patient = a.id_patient 
         AND DATE(a.date_admission) <= DATE(s.date_suivi) 
         AND (a.date_sortie IS NULL OR DATE(a.date_sortie) >= DATE(s.date_suivi))
+    LEFT JOIN chambres c ON a.id_chambre = c.id_chambre
     WHERE s.id_medecin = ? AND DATE(s.date_suivi) = ?
     ORDER BY s.date_suivi DESC
 ");

@@ -8,141 +8,97 @@ if (!isset($_SESSION['user_id']) || strtolower($_SESSION['role']) !== 'secretair
     exit;
 }
 
-// 1. DATE + FILTRE MÉDECIN
-$selected_date = $_GET['date'] ?? date('Y-m-d');
+// 1. GESTION DE LA DATE ET DU FILTRE MÉDECIN (AVEC MÉMOIRE)
+$selected_date = isset($_GET['date']) ? $_GET['date'] : date('Y-m-d');
 
+// Si on reçoit un nouveau médecin par l'URL, on l'enregistre en session
 if (isset($_GET['medecin_id'])) {
     $_SESSION['filter_medecin'] = $_GET['medecin_id'];
 }
 
+// On utilise la session s'il n'y a pas de GET, ou rien du tout par défaut
 $filter_medecin = $_SESSION['filter_medecin'] ?? '';
 $user_id = $_SESSION['user_id'];
+
 
 // Infos secrétaire
 $stmt = $pdo->prepare("SELECT nom, prenom FROM utilisateurs WHERE id_user = ?");
 $stmt->execute([$user_id]);
 $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-// LISTE DES MÉDECINS
-$medecins_list = $pdo->query("
-    SELECT id_user, nom, prenom, specialite 
-    FROM utilisateurs 
-    WHERE LOWER(role) = 'medecin'
-    ORDER BY nom
-")->fetchAll(PDO::FETCH_ASSOC);
+// --- LISTE DES MÉDECINS POUR LE FILTRE ---
+$sql_medecins = "SELECT id_user, nom, prenom,specialite, role FROM utilisateurs WHERE LOWER(role) = 'medecin' ORDER BY nom ASC";
+$medecins_list = $pdo->query($sql_medecins)->fetchAll(PDO::FETCH_ASSOC);
 
-// STATISTIQUES
-$sql_new_pat = "
-    SELECT COUNT(DISTINCT p.id_patient)
-    FROM patients p
-    JOIN admissions a ON p.id_patient = a.id_patient
-    WHERE DATE(p.date_inscription) = ?
-";
-$params = [$selected_date];
+// --- STATISTIQUES ---
+// Compte uniquement les nouveaux patients qui ont été admis chez ce médecin aujourd'hui
+$sql_new_pat = "SELECT COUNT(DISTINCT p.id_patient) FROM patients p 
+                JOIN admissions a ON p.id_patient = a.id_patient 
+                WHERE DATE(p.date_inscription) = '$selected_date'";
+if($filter_medecin) $sql_new_pat .= " AND a.id_medecin = " . intval($filter_medecin);
+$count_patients = $pdo->query($sql_new_pat)->fetchColumn();
 
-if ($filter_medecin) {
-    $sql_new_pat .= " AND a.id_medecin = ?";
-    $params[] = $filter_medecin;
-}
 
-$stmt = $pdo->prepare($sql_new_pat);
-$stmt->execute($params);
-$count_patients = $stmt->fetchColumn();
 
-// ADMISSIONS COUNT
-$sql_count_adm = "
-    SELECT COUNT(*) 
-    FROM admissions 
-    WHERE DATE(date_admission) = ?
-";
-$params = [$selected_date];
+// Statistiques admissions filtrées
+$sql_count_adm = "SELECT COUNT(*) FROM admissions WHERE DATE(date_admission) = '$selected_date'";
+if($filter_medecin) $sql_count_adm .= " AND id_medecin = " . intval($filter_medecin);
+$count_admissions = $pdo->query($sql_count_adm)->fetchColumn();
 
-if ($filter_medecin) {
-    $sql_count_adm .= " AND id_medecin = ?";
-    $params[] = $filter_medecin;
-}
+// --- RECHERCHE PATIENT ---
 
-$stmt = $pdo->prepare($sql_count_adm);
-$stmt->execute($params);
-$count_admissions = $stmt->fetchColumn();
-
-// 🔍 RECHERCHE PATIENT (CORRIGÉE)
+// --- RECHERCHE PATIENT ---
+// --- RECHERCHE PATIENT FILTRÉE ---
 $search = $_GET['q'] ?? '';
 $search_results = [];
 
 if (!empty($search)) {
-
-    $sql = "
-        SELECT DISTINCT p.*
-        FROM patients p
-    ";
-
-    if ($filter_medecin) {
-        $sql .= " JOIN admissions a ON p.id_patient = a.id_patient ";
+    // On cherche les patients. Si un médecin est filtré, on ne montre que ceux qui ont une admission chez lui.
+    $sql_search = "SELECT DISTINCT p.* FROM patients p ";
+    if(!empty($filter_medecin)) {
+        $sql_search .= " JOIN admissions a ON p.id_patient = a.id_patient ";
     }
-
-    $sql .= "
-        WHERE (p.cin LIKE :q OR p.nom LIKE :q OR p.telephone LIKE :q)
-    ";
-
-    if ($filter_medecin) {
-        $sql .= " AND a.id_medecin = :medecin ";
+    
+    $sql_search .= " WHERE (p.cin LIKE :q OR p.nom LIKE :q OR p.telephone LIKE :q)";
+    
+    if(!empty($filter_medecin)) {
+        $sql_search .= " AND a.id_medecin = " . intval($filter_medecin);
     }
-
-    $sql .= " ORDER BY p.nom LIMIT 5";
-
-    $stmt = $pdo->prepare($sql);
-    $stmt->bindValue(':q', "%$search%");
-
-    if ($filter_medecin) {
-        $stmt->bindValue(':medecin', $filter_medecin, PDO::PARAM_INT);
-    }
-
-    $stmt->execute();
+    $sql_search .= " LIMIT 5";
+    
+    $stmt = $pdo->prepare($sql_search);
+    $stmt->execute(['q' => "%$search%"]);
     $search_results = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
-// ADMISSIONS DU JOUR
-$sql_adm = "
-    SELECT a.*, p.nom, p.prenom, f.id_facture, u.nom AS nom_medecin
-    FROM admissions a
-    JOIN patients p ON a.id_patient = p.id_patient
+
+
+if (!empty($search)) {
+    $stmt = $pdo->prepare("SELECT * FROM patients WHERE cin LIKE ? OR nom LIKE ? OR telephone LIKE ? LIMIT 5");
+    $stmt->execute(["%$search%", "%$search%", "%$search%"]);
+    $search_results = $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+
+// --- ADMISSIONS FILTRÉES ---
+$sql_adm = "SELECT a.*, p.nom, p.prenom, f.id_facture, u.nom as nom_medecin 
+    FROM admissions a 
+    JOIN patients p ON a.id_patient = p.id_patient 
     JOIN utilisateurs u ON a.id_medecin = u.id_user
     LEFT JOIN factures f ON a.id_admission = f.id_admission
-    WHERE DATE(a.date_admission) = ?
-";
-$params = [$selected_date];
-
-if ($filter_medecin) {
-    $sql_adm .= " AND a.id_medecin = ?";
-    $params[] = $filter_medecin;
-}
-
+    WHERE DATE(a.date_admission) = '$selected_date'";
+if($filter_medecin) $sql_adm .= " AND a.id_medecin = " . intval($filter_medecin);
 $sql_adm .= " ORDER BY a.date_admission DESC";
+$admissions = $pdo->query($sql_adm)->fetchAll(PDO::FETCH_ASSOC);
 
-$stmt = $pdo->prepare($sql_adm);
-$stmt->execute($params);
-$admissions = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-// SUIVIS
-$sql_s = "
-    SELECT s.*, p.nom, p.prenom
-    FROM suivis s
-    JOIN patients p ON s.id_patient = p.id_patient
-    WHERE DATE(s.date_suivi) = ?
-";
-$params = [$selected_date];
-
-if ($filter_medecin) {
-    $sql_s .= " AND s.id_medecin = ?";
-    $params[] = $filter_medecin;
-}
-
-$stmt = $pdo->prepare($sql_s);
-$stmt->execute($params);
-$suivis_du_jour = $stmt->fetchAll(PDO::FETCH_ASSOC);
+// --- SUIVIS FILTRÉS ---
+$sql_s = "SELECT s.*, p.nom, p.prenom 
+    FROM suivis s 
+    JOIN patients p ON s.id_patient = p.id_patient 
+    WHERE DATE(s.date_suivi) = '$selected_date'";
+if($filter_medecin) $sql_s .= " AND s.id_medecin = " . intval($filter_medecin);
+$suivis_du_jour = $pdo->query($sql_s)->fetchAll(PDO::FETCH_ASSOC);
 ?>
-
 
 <!DOCTYPE html>
 <html lang="fr">

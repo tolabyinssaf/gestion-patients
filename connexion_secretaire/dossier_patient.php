@@ -25,6 +25,17 @@ $traitements = $pdo->prepare("SELECT * FROM traitements WHERE id_patient = ? ORD
 $traitements->execute([$id_patient]);
 $liste_traitements = $traitements->fetchAll(PDO::FETCH_ASSOC);
 
+// 4. ADMISSION ACTUELLE (AJOUTÉ)
+$stmt_adm = $pdo->prepare("
+    SELECT a.*, u.nom as nom_medecin, u.prenom as prenom_medecin 
+    FROM admissions a 
+    LEFT JOIN utilisateurs u ON a.id_medecin = u.id_user 
+    WHERE a.id_patient = ? 
+    ORDER BY a.date_admission DESC LIMIT 1
+");
+$stmt_adm->execute([$id_patient]);
+$last_adm = $stmt_adm->fetch(PDO::FETCH_ASSOC);
+
 // Infos secrétaire
 $user_id = $_SESSION['user_id'];
 $stmt_u = $pdo->prepare("SELECT nom, prenom FROM utilisateurs WHERE id_user = ?");
@@ -57,14 +68,12 @@ $user = $stmt_u->fetch(PDO::FETCH_ASSOC);
         * { margin:0; padding:0; box-sizing:border-box; font-family: 'Plus Jakarta Sans', sans-serif; }
         body { background: var(--bg-body); color: #1e293b; }
 
-        /* HEADER & SIDEBAR REUTILISÉS */
         header { background: var(--white); padding: 0 40px; height: var(--header-height); display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); position: fixed; top: 0; left: 0; right: 0; z-index: 1000; }
         .sidebar { width: var(--sidebar-width); background: var(--sidebar-bg); padding: 24px 16px; position: fixed; top: var(--header-height); left: 0; bottom: 0; z-index: 999; }
         .sidebar a { display: flex; align-items: center; gap: 12px; color: #94a3b8; text-decoration: none; padding: 12px 16px; border-radius: 10px; margin-bottom: 5px; transition: 0.2s; }
         .sidebar a:hover, .sidebar a.active { background: var(--primary); color: #fff; }
         .content { margin-left: var(--sidebar-width); margin-top: var(--header-height); padding: 40px; }
 
-        /* NOUVEAU DESIGN DOSSIER */
         .patient-banner {
             background: var(--white);
             border-radius: 24px;
@@ -95,7 +104,6 @@ $user = $stmt_u->fetch(PDO::FETCH_ASSOC);
             gap: 8px;
         }
 
-        /* CARDS */
         .medical-card {
             background: var(--white);
             border-radius: 24px;
@@ -119,7 +127,6 @@ $user = $stmt_u->fetch(PDO::FETCH_ASSOC);
             font-size: 18px;
         }
 
-        /* TIMELINE SUIVI */
         .timeline-ui {
             position: relative;
             padding-left: 20px;
@@ -139,7 +146,6 @@ $user = $stmt_u->fetch(PDO::FETCH_ASSOC);
             background: white; border: 3px solid var(--primary);
         }
 
-        /* INFOS STYLING */
         .info-row { margin-bottom: 18px; }
         .info-label { font-size: 12px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
         .info-value { font-size: 15px; font-weight: 600; color: #1e293b; }
@@ -152,10 +158,9 @@ $user = $stmt_u->fetch(PDO::FETCH_ASSOC);
             border: none;
         }
         .btn-edit { background: #f1f5f9; color: #475569; }
-        .btn-facture { background: #fbbf24; color: #92400e; }
+        .btn-facture { background: #e2b84eff; color: #92400e; }
         .btn-edit:hover { background: #e2e8f0; }
 
-        /* ALERT BOX */
         .critical-note {
             background: #fff1f2;
             border-radius: 16px;
@@ -202,12 +207,15 @@ $user = $stmt_u->fetch(PDO::FETCH_ASSOC);
                 </div>
             </div>
             <div class="d-flex gap-2">
-                <a href="modifier_patient.php?id=<?= $p['id_patient'] ?>" class="btn-action-ui btn-edit text-decoration-none">
-                    <i class="fa-solid fa-user-pen me-2"></i>Modifier
-                </a>
-                <a href="generer_facture.php?id_p=<?= $p['id_patient'] ?>" class="btn-action-ui btn-facture text-decoration-none">
-                    <i class="fa-solid fa-plus-circle me-2"></i>Nouvelle Facture
-                </a>
+                <?php if($last_adm): ?>
+    <a href="details_facture.php?id_adm=<?= $last_adm['id_admission'] ?>" class="btn-action-ui btn-facture text-decoration-none">
+        <i class="fa-solid fa-file-invoice-dollar me-2"></i>Voir la Facture
+    </a>
+<?php else: ?>
+    <button class="btn-action-ui btn-facture opacity-50" disabled>
+        <i class="fa-solid fa-ban me-2"></i>Pas d'admission active
+    </button>
+<?php endif; ?>
             </div>
         </div>
 
@@ -215,26 +223,60 @@ $user = $stmt_u->fetch(PDO::FETCH_ASSOC);
             <div class="col-lg-4">
                 <div class="medical-card shadow-sm">
                     <div class="card-header-ui">
+                        <h5 class="fw-bold m-0">Admission Actuelle</h5>
+                        <div class="icon-shape" style="background: #fff7ed; color: #bf7c4cff;"><i class="fa-solid fa-hospital-user"></i></div>
+                    </div>
+
+                    <?php if($last_adm): ?>
+                        <div class="info-row">
+                            <div class="info-label">Médecin / Service</div>
+                            <div class="info-value">Dr. <?= htmlspecialchars($last_adm['nom_medecin']) ?> (<?= htmlspecialchars($last_adm['service']) ?>)</div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Motif Admission</div>
+                            <div class="info-value"><?= htmlspecialchars($last_adm['motif']) ?></div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Date Admission</div>
+                            <div class="info-value"><?= date('d/m/Y à H:i', strtotime($last_adm['date_admission'])) ?></div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Chambre</div>
+                            <div class="info-value"><?= $last_adm['id_chambre'] ? "Chambre ".$last_adm['id_chambre'] : 'Non assignée' ?></div>
+                        </div>
+                    <?php else: ?>
+                        <div class="text-center py-4">
+                            <i class="fa-solid fa-door-open text-muted opacity-25 fa-3x mb-3"></i>
+                            <p class="text-muted small">Aucune admission trouvée</p>
+                            <a href="../admission/ajouter_admission.php?id_patient=<?= $p['id_patient'] ?>" 
+   class="btn-action-ui text-decoration-none shadow-sm" 
+   style="background: #bf7c4cff; color: white; display: inline-flex; align-items: center; gap: 8px;">
+    <i class="fa-solid fa-plus-circle"></i>
+    Nouvelle Admission
+</a>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <div class="col-lg-4">
+                <div class="medical-card shadow-sm">
+                    <div class="card-header-ui">
                         <h5 class="fw-bold m-0">Profil Patient</h5>
                         <div class="icon-shape" style="background: #eff6ff; color: #3b82f6;"><i class="fa-solid fa-address-book"></i></div>
                     </div>
-                    
                     <div class="info-row">
                         <div class="info-label">Téléphone Mobile</div>
                         <div class="info-value text-primary"><?= $p['telephone'] ?></div>
                     </div>
-
                     <div class="info-row">
                         <div class="info-label">Genre / Sexe</div>
                         <div class="info-value"><?= $p['sexe'] ?? 'Non défini' ?></div>
                     </div>
-
                     <div class="info-row">
                         <div class="info-label">Adresse Résidentielle</div>
                         <div class="info-value"><?= $p['adresse'] ?: 'N/A' ?></div>
                     </div>
-
-
                 </div>
             </div>
 
@@ -244,7 +286,6 @@ $user = $stmt_u->fetch(PDO::FETCH_ASSOC);
                         <h5 class="fw-bold m-0">Historique des visites</h5>
                         <div class="icon-shape" style="background: #f0fdf4; color: #22c55e;"><i class="fa-solid fa-stethoscope"></i></div>
                     </div>
-
                     <div class="timeline-ui">
                         <?php if($liste_suivis): ?>
                             <?php foreach($liste_suivis as $s): ?>
@@ -262,30 +303,53 @@ $user = $stmt_u->fetch(PDO::FETCH_ASSOC);
                     </div>
                 </div>
             </div>
+        </div>
 
-            <div class="col-lg-4">
+        <div class="row g-4 mt-2">
+            <div class="col-12">
                 <div class="medical-card shadow-sm">
                     <div class="card-header-ui">
-                        <h5 class="fw-bold m-0">Prescriptions</h5>
+                        <h5 class="fw-bold m-0">Prescriptions & Traitements</h5>
                         <div class="icon-shape" style="background: #faf5ff; color: #a855f7;"><i class="fa-solid fa-pills"></i></div>
                     </div>
+                    <div class="row">
+                        <?php if($liste_traitements): ?>
+                            <?php foreach($liste_traitements as $t): ?>
+    <div class="col-md-4">
+        <div class="p-3 rounded-4 border mb-3 bg-white shadow-sm h-100" style="border-left: 4px solid #a855f7 !important;">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <span class="badge rounded-pill px-3 py-2" style="background: #faf5ff; color: #a855f7; font-size: 11px; border: 1px solid #f3e8ff;">
+                    <i class="fa-regular fa-calendar-check me-1"></i> <?= date('d/m/Y', strtotime($t['date_traitement'])) ?>
+                </span>
+                <i class="fa-solid fa-pills text-muted opacity-50"></i>
+            </div>
 
-                    <?php if($liste_traitements): ?>
-                        <?php foreach($liste_traitements as $t): ?>
-                            <div class="p-3 rounded-4 border mb-3 bg-light bg-opacity-50">
-                                <div class="d-flex justify-content-between align-items-start mb-2">
-                                    <span class="badge bg-white text-dark border rounded-pill small"><?= date('d/m/Y', strtotime($t['date_traitement'])) ?></span>
-                                    <i class="fa-solid fa-file-medical text-muted"></i>
-                                </div>
-                                <div class="info-value" style="font-size: 14px; color: #4338ca;"><?= $t['libelle_traitement'] ?></div>
+            <div class="mb-2">
+                <div class="info-label" style="font-size: 10px; color: #a855f7;">Médicament</div>
+                <div class="fw-bold text-dark" style="font-size: 15px; letter-spacing: -0.3px;">
+                    <?= htmlspecialchars($t['medicament']) ?>
+                </div>
+            </div>
+
+            <?php if(!empty($t['description'])): ?>
+            <div class="pt-2 border-top mt-2">
+                <div class="info-label" style="font-size: 10px;">Description & Posologie</div>
+                <div class="text-muted small italic" style="line-height: 1.4;">
+                    <i class="fa-solid fa-quote-left me-1 opacity-25"></i>
+                    <?= htmlspecialchars($t['description']) ?>
+                </div>
+            </div>
+            <?php endif; ?>
+        </div>
+    </div>
+<?php endforeach; ?>
+                        <?php else: ?>
+                            <div class="col-12 text-center py-5">
+                                <i class="fa-solid fa-prescription text-muted opacity-25 fa-3x mb-3"></i>
+                                <p class="text-muted small">Aucun traitement actif</p>
                             </div>
-                        <?php endforeach; ?>
-                    <?php else: ?>
-                        <div class="text-center py-5">
-                            <i class="fa-solid fa-prescription text-muted opacity-25 fa-3x mb-3"></i>
-                            <p class="text-muted small">Aucun traitement actif</p>
-                        </div>
-                    <?php endif; ?>
+                        <?php endif; ?>
+                    </div>
                 </div>
             </div>
         </div>

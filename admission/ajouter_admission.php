@@ -2,7 +2,7 @@
 session_start();
 include "../config/connexion.php";
 
-// 1. Définition des types d'erreurs (Inchangé)
+// --- LOGIQUE PHP ORIGINALE ---
 $errors = [
     "admission_en_cours" => ["icon" => "fa-solid fa-heart-crack", "class" => "alert-error"],
     "champ_vide" => ["icon" => "fa-solid fa-triangle-exclamation", "class" => "alert-warning"],
@@ -16,19 +16,28 @@ $errors = [
 $message_type = "";
 $message_text = "";
 
-// 2. Gestion session utilisateur
 if (!isset($_SESSION['id_user'])) { $_SESSION['id_user'] = 1; }
-$user_id = $_SESSION['user_id'] ?? $_SESSION['id_user'];
 
+$user_id = $_SESSION['user_id'] ?? $_SESSION['id_user'];
 $stmt_user = $pdo->prepare("SELECT nom, prenom FROM utilisateurs WHERE id_user = ?");
 $stmt_user->execute([$user_id]);
 $user_info = $stmt_user->fetch(PDO::FETCH_ASSOC);
 
-// 3. Récupération listes (Patients / Médecins)
 $patients = $pdo->query("SELECT id_patient, nom, prenom, cin, date_naissance, adresse, telephone FROM patients ORDER BY nom ASC")->fetchAll(PDO::FETCH_ASSOC);
 $medecins = $pdo->query("SELECT id_user, nom, prenom FROM utilisateurs WHERE role = 'medecin' ORDER BY nom ASC")->fetchAll(PDO::FETCH_ASSOC);
 
-// 4. Historique des admissions pour l'affichage des infos patient
+// --- NOUVELLE LOGIQUE : DÉTECTION DU PATIENT VIA URL ---
+$patient_preselectionne = null;
+if (isset($_GET['id_patient'])) {
+    $id_get = intval($_GET['id_patient']);
+    foreach ($patients as $p) {
+        if ($p['id_patient'] == $id_get) {
+            $patient_preselectionne = $p;
+            break;
+        }
+    }
+}
+
 $lastAdmissions = [];
 foreach($patients as $p){
     $stmt = $pdo->prepare("SELECT a.date_admission, a.service, c.numero_chambre AS chambre, CONCAT(u.nom, ' ', u.prenom) AS nom_medecin 
@@ -38,63 +47,56 @@ foreach($patients as $p){
     $lastAdmissions[$p['id_patient']] = $stmt->fetch(PDO::FETCH_ASSOC);
 }
 
-// 5. TRAITEMENT DU FORMULAIRE (CORRIGÉ)
 if(isset($_POST['submit'])) {
     try {
-        if($_POST['id_patient'] === 'nouveau') { header("Location: d2.php"); exit; }
-        
-        // Sécurisation des entrées
-        $id_patient = intval($_POST['id_patient']);
-        $type_admission = $_POST['type_admission'] ?? 'Normal';
-        $chambre = !empty($_POST['chambre']) ? intval($_POST['chambre']) : null;
-        $id_medecin = !empty($_POST['id_medecin']) ? intval($_POST['id_medecin']) : null;
-        $date_adm = $_POST['date_admission'];
-        $service = $_POST['service'];
-        $motif = trim($_POST['motif']);
+        // Sécurité : redirection si nouveau patient
+        if($_POST['id_patient'] === 'nouveau') { 
+            header("Location: d2.php"); 
+            exit; 
+        }
 
-        // Appel de la procédure (7 paramètres correspondants à votre SQL)
+        // Préparation des données
+        $id_patient = $_POST['id_patient'];
+        $date_admission = $_POST['date_admission'];
+        $service = $_POST['service'];
+        $motif = $_POST['motif'];
+        $type_admission = $_POST['type_admission'] ?? 'Normal';
+        
+        // Gestion rigoureuse des valeurs optionnelles
+        $chambre = (!empty($_POST['chambre'])) ? $_POST['chambre'] : null;
+        $id_medecin = (!empty($_POST['id_medecin'])) ? $_POST['id_medecin'] : null;
+
+        // Préparation de l'appel à la procédure
         $stmt = $pdo->prepare("CALL sp_add_admission_safe(?, ?, ?, ?, ?, ?, ?)");
         
-        $stmt->execute([
-            $id_patient, 
-            $date_adm, 
-            $service, 
-            $motif, 
-            $type_admission, 
-            $chambre, 
-            $id_medecin
-        ]);
+        // Liaison des paramètres avec gestion du type NULL
+        $stmt->bindValue(1, $id_patient, PDO::PARAM_INT);
+        $stmt->bindValue(2, $date_admission);
+        $stmt->bindValue(3, $service);
+        $stmt->bindValue(4, $motif);
+        $stmt->bindValue(5, $type_admission);
+        $stmt->bindValue(6, $chambre, $chambre === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
+        $stmt->bindValue(7, $id_medecin, $id_medecin === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
 
-        // CRUCIAL : On ne fait PAS de $stmt->fetch() ici ! 
-        // On libère juste le curseur pour valider la transaction
+        $stmt->execute();
+        
+        // Important pour libérer la connexion après une procédure stockée
         $stmt->closeCursor();
 
         $message_type = "success";
         $message_text = "Admission enregistrée avec succès !";
-        
+
     } catch(PDOException $e) {
         $errorMsg = $e->getMessage();
-        
-        // Mapping des erreurs SQL vers vos alertes visuelles
-        if(strpos($errorMsg, 'Admission déjà en cours') !== false) {
-            $message_type = "admission_en_cours";
-            $message_text = "Attention : Ce patient a déjà une hospitalisation active.";
-        } elseif(strpos($errorMsg, 'Patient introuvable') !== false) {
-            $message_type = "erreur_patient";
-            $message_text = "Le patient sélectionné n'existe plus.";
-        } elseif(strpos($errorMsg, 'Le service est obligatoire') !== false) {
-            $message_type = "champ_vide";
-            $message_text = "Veuillez sélectionner un service médical.";
-        } elseif(strpos($errorMsg, 'Le motif est obligatoire') !== false) {
-            $message_type = "champ_vide";
-            $message_text = "Veuillez saisir le motif de l'admission.";
-        } else {
-            $message_type = "erreur_sql";
-            $message_text = "Erreur technique : " . $errorMsg;
+        // Détection des erreurs renvoyées par le SIGNAL SQL de votre procédure
+        if(strpos($errorMsg, 'Admission déjà en cours') !== false) $message_type = "admission_en_cours";
+        elseif(strpos($errorMsg, 'Patient introuvable') !== false) $message_type = "erreur_patient";
+        elseif(strpos($errorMsg, "Date d'admission invalide") !== false) $message_type = "erreur_date";
+        elseif(strpos($errorMsg, 'Service invalide') !== false) $message_type = "erreur_service";
+        else { 
+            $message_type = "erreur_sql"; 
+            $message_text = "Erreur base de données : " . $errorMsg; 
         }
-    } catch(Exception $e) {
-        $message_type = "erreur_sql";
-        $message_text = "Une erreur inattendue est survenue.";
     }
 }
 ?>
@@ -120,7 +122,7 @@ if(isset($_POST['submit'])) {
             --white: #ffffff;
             --header-height: 75px;
             --sidebar-width: 260px;
-            --accent: #14b8a6; /* Vert plus moderne au lieu du bleu */
+            --accent: #14b8a6; 
             --gradient-vert: linear-gradient(135deg, #0f172a,#1ca499ff);
         }
 
@@ -154,7 +156,6 @@ if(isset($_POST['submit'])) {
 
         .content { margin-left: var(--sidebar-width); margin-top: var(--header-height); padding: 40px; }
 
-        /* --- CARTE MODERNE --- */
         .glass-card {
             background: var(--white);
             border-radius: 24px;
@@ -261,9 +262,26 @@ if(isset($_POST['submit'])) {
             color: white;
         }
 
-        .alert-medical { border-radius: 12px; border: none; padding: 15px; font-weight: 500; }
-        .alert-success { background: #dcfce7; color: #166534; }
-        .alert-error { background: #fee2e2; color: #991b1b; }
+        /* Style global pour toutes les alertes en jaune */
+.alert-medical.alert-warning { 
+    background: #fef9c3; /* Jaune clair */
+    color: #854d0e;      /* Texte marron foncé pour le contraste */
+    border: 1px solid #fde047;
+    border-radius: 12px;
+    padding: 15px;
+    font-weight: 500;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+/* On force l'icône à avoir une couleur orange plus vive */
+.alert-medical.alert-warning i {
+    color: #ca8a04;
+}
+.alert-success { 
+    background: #f0fdf4 !important; 
+    border: 1px solid #bbf7d0 !important;
+    color: #166534 !important;
+}
         
         .theme-switch { cursor: pointer; padding: 8px 16px; border-radius: 50px; background: #f1f5f9; border: 1px solid var(--border); font-size: 13px; font-weight: 600; }
     </style>
@@ -282,7 +300,7 @@ if(isset($_POST['submit'])) {
 </header>
 
 <div class="wrapper">
-    <aside class="sidebar">
+      <aside class="sidebar">
         <h3 style="color:rgba(255,255,255,0.3); font-size:11px; text-transform:uppercase; margin-bottom:20px; padding-left:12px;">Menu Gestion</h3>
         <a href="../connexion_secretaire/dashboard_secretaire.php"><i class="fa-solid fa-chart-line"></i> Tableau de bord</a>
         <a href="../connexion_secretaire/patients_secr.php"><i class="fa-solid fa-user-group"></i> Patients</a>
@@ -312,7 +330,7 @@ if(isset($_POST['submit'])) {
                         <h1 class="h3 fw-800 mb-1" style="color: var(--primary); font-weight: 800;">Nouvelle Admission</h1>
                         <p class="text-muted small mb-0">Enregistrement d'un patient en salle d'attente ou hospitalisation</p>
                     </div>
-                    <a href="admissions.php" class="btn btn-light btn-sm rounded-pill px-3">
+                    <a href="admissions_list.php" class="btn btn-light btn-sm rounded-pill px-3">
                         <i class="fa-solid fa-arrow-left me-1"></i> Liste
                     </a>
                 </div>
@@ -324,6 +342,7 @@ if(isset($_POST['submit'])) {
                         <h5 class="section-title-text">1. Identification du Patient</h5>
                     </div>
 
+                    <?php if (!$patient_preselectionne): ?>
                     <div class="search-container mb-4">
                         <label class="form-label">Rechercher par Nom ou CIN</label>
                         <div class="input-group patient-search">
@@ -332,7 +351,7 @@ if(isset($_POST['submit'])) {
                             
                             <div class="patient-list" id="patientList">
                                 <?php foreach($patients as $p): ?>
-                                   <div class="patient-item" data-id="<?= $p['id_patient'] ?>" 
+                                    <div class="patient-item" data-id="<?= $p['id_patient'] ?>" 
                                         data-nom="<?= strtolower($p['nom']) ?>" 
                                         data-prenom="<?= strtolower($p['prenom']) ?>"
                                         data-cin="<?= strtolower($p['cin'] ?? '') ?>">
@@ -343,7 +362,7 @@ if(isset($_POST['submit'])) {
                                             </div>
                                             <i class="fa-solid fa-chevron-right text-light"></i>
                                         </div>
-                                   </div>
+                                    </div>
                                 <?php endforeach; ?>
                                 <div class="patient-item text-primary fw-bold border-top" data-id="nouveau">
                                     <i class="fa-solid fa-plus-circle me-2"></i> Créer une nouvelle fiche
@@ -352,40 +371,60 @@ if(isset($_POST['submit'])) {
                         </div>
                         <input type="hidden" name="id_patient" id="id_patient" required>
                     </div>
+                    <?php else: ?>
+                        <div class="alert alert-light border d-flex align-items-center justify-content-between mb-4 shadow-sm" style="border-radius: 16px; background: #f8fafc;">
+                            <div class="d-flex align-items-center gap-3">
+                                <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 45px; height: 45px;">
+                                    <i class="fa-solid fa-user"></i>
+                                </div>
+                                <div>
+                                    <h6 class="mb-0 fw-bold"><?= htmlspecialchars($patient_preselectionne['nom'].' '.$patient_preselectionne['prenom']) ?></h6>
+                                    <small class="text-muted">CIN: <?= htmlspecialchars($patient_preselectionne['cin'] ?? 'Non renseigné') ?></small>
+                                </div>
+                            </div>
+                            <input type="hidden" name="id_patient" id="id_patient" value="<?= $patient_preselectionne['id_patient'] ?>" required>
+                        </div>
+                    <?php endif; ?>
 
-                    <div id="patientInfo" style="display:none;" class="mb-5">
+                    <div id="patientInfo" class="mb-5" <?= $patient_preselectionne ? '' : 'style="display:none;"' ?>>
                         <div class="row g-3">
                             <div class="col-md-7">
                                 <div class="info-card h-100">
                                     <div class="row g-3">
                                         <div class="col-6">
                                             <label class="form-label mb-0">Patient</label>
-                                            <div class="fw-bold fs-5 text-uppercase"><span id="info_nom"></span> <span id="info_prenom" class="text-capitalize"></span></div>
+                                            <div class="fw-bold fs-5 text-uppercase">
+                                                <span id="info_nom"><?= $patient_preselectionne['nom'] ?? '' ?></span> 
+                                                <span id="info_prenom" class="text-capitalize"><?= $patient_preselectionne['prenom'] ?? '' ?></span>
+                                            </div>
                                         </div>
                                         <div class="col-6 text-end">
                                             <span class="badge bg-white text-success border">Dossier Actif</span>
                                         </div>
                                         <div class="col-6">
                                             <label class="form-label mb-0">Né(e) le</label>
-                                            <div id="info_date" class="fw-medium"></div>
+                                            <div id="info_date" class="fw-medium"><?= $patient_preselectionne['date_naissance'] ?? '' ?></div>
                                         </div>
                                         <div class="col-6">
                                             <label class="form-label mb-0">Téléphone</label>
-                                            <div id="info_tel" class="fw-medium"></div>
+                                            <div id="info_tel" class="fw-medium"><?= $patient_preselectionne['telephone'] ?? '' ?></div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
                             <div class="col-md-5">
                                 <div class="last-visit-badge h-100">
+                                    <?php 
+                                        $last = $patient_preselectionne ? ($lastAdmissions[$patient_preselectionne['id_patient']] ?? null) : null;
+                                    ?>
                                     <div class="small text-white-50 mb-2">DERNIÈRE VISITE</div>
                                     <div class="d-flex align-items-center gap-3 mb-2">
                                         <i class="fa-solid fa-clock-rotate-left opacity-50"></i>
-                                        <span id="info_admission" class="fw-bold"></span>
+                                        <span id="info_admission" class="fw-bold"><?= $last['date_admission'] ?? 'Aucune' ?></span>
                                     </div>
                                     <div class="d-flex align-items-center gap-3">
                                         <i class="fa-solid fa-hospital opacity-50"></i>
-                                        <span class="fw-medium"><span id="info_service"></span> (Ch. <span id="info_chambre"></span>)</span>
+                                        <span class="fw-medium"><span id="info_service"><?= $last['service'] ?? '-' ?></span> (Ch. <span id="info_chambre"><?= $last['chambre'] ?? '-' ?></span>)</span>
                                     </div>
                                 </div>
                             </div>
@@ -426,12 +465,10 @@ if(isset($_POST['submit'])) {
                                 <input type="hidden" name="id_medecin" id="id_medecin">
                                 <div class="patient-list" id="medecinList">
                                     <?php foreach($medecins as $m): ?>
-                                        <div class="medecin-item" data-id="<?= $m['id_user'] ?>" 
-     data-nom="<?= strtolower($m['nom']) ?>" 
-     data-prenom="<?= strtolower($m['prenom']) ?>"
-     style="padding: 12px 18px; border-bottom: 1px solid #f1f5f9; cursor: pointer;">
-    Dr. <?= htmlspecialchars($m['nom'].' '.$m['prenom']) ?>
-</div>
+                                        <div class="medecin-item patient-item" data-id="<?= $m['id_user'] ?>" 
+                                             data-nom="<?= strtolower($m['nom']) ?>" data-prenom="<?= strtolower($m['prenom']) ?>">
+                                            Dr. <?= htmlspecialchars($m['nom'].' '.$m['prenom']) ?>
+                                        </div>
                                     <?php endforeach; ?>
                                 </div>
                             </div>
@@ -446,7 +483,7 @@ if(isset($_POST['submit'])) {
                         </div>
                         <div class="col-12">
                             <label class="form-label">Motif de consultation <span class="text-danger">*</span></label>
-                            <textarea name="motif" class="form-control" rows="3" placeholder="Symptômes, notes importantes..."></textarea>
+                            <textarea name="motif" class="form-control" rows="3" placeholder="Symptômes, notes importantes..." required></textarea>
                         </div>
                     </div>
 
@@ -467,7 +504,6 @@ if(isset($_POST['submit'])) {
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 
 <script>
-// --- JS ORIGINAL ---
 const patientsData = <?php echo json_encode($patients); ?>;
 const lastAdmissions = <?php echo json_encode($lastAdmissions); ?>;
 
@@ -498,7 +534,6 @@ $(document).on("click", "#patientList .patient-item", function(){
     $("#info_nom").text(patient.nom);
     $("#info_prenom").text(patient.prenom);
     $("#info_date").text(patient.date_naissance);
-    $("#info_adresse").text(patient.adresse);
     $("#info_tel").text(patient.telephone);
 
     if(lastAdm){
@@ -513,21 +548,17 @@ $(document).on("click", "#patientList .patient-item", function(){
     $("#patientInfo").slideDown();
 });
 
-// Gestion de la recherche Médecin
 const medSearch = $("#medecinSearch");
 const medList = $("#medecinList");
-
-medSearch.on("focus click keyup", function() {
+medSearch.on("focus click keyup", function(){
     medList.show();
     let value = $(this).val().toLowerCase();
-    $(".medecin-item").each(function() {
+    $("#medecinList .patient-item").each(function(){
         const nom = $(this).data("nom") || "";
         const prenom = $(this).data("prenom") || "";
         $(this).toggle(nom.includes(value) || prenom.includes(value));
     });
 });
-
-// CLIC SUR UN MÉDECIN (CORRIGÉ)
 $(document).on("click", ".medecin-item", function(e) {
     e.preventDefault();
     

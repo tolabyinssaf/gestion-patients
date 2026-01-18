@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Hôte : 127.0.0.1
--- Généré le : sam. 17 jan. 2026 à 20:26
+-- Généré le : dim. 18 jan. 2026 à 12:09
 -- Version du serveur : 10.4.32-MariaDB
 -- Version de PHP : 8.2.12
 
@@ -75,69 +75,67 @@ CREATE DEFINER=`root`@`localhost` PROCEDURE `login_user` (IN `p_email` VARCHAR(1
     SELECT v_id AS id, v_role AS role;
 END$$
 
-CREATE DEFINER=`root`@`localhost` PROCEDURE `sp_add_admission_safe` (IN `p_id_patient` INT, IN `p_date_admission` DATE, IN `p_service` VARCHAR(100), IN `p_motif` TEXT, IN `p_type_admission` VARCHAR(20), IN `p_id_chambre` INT, IN `p_id_medecin` INT)   BEGIN
+CREATE DEFINER=`root`@`localhost` PROCEDURE `sp_add_admission_safe` (IN `p_id_patient` INT, IN `p_date_admission` DATE, IN `p_service` VARCHAR(100), IN `p_motif` TEXT, IN `p_type_admission` VARCHAR(50), IN `p_id_chambre` INT, IN `p_id_medecin` INT)   BEGIN
     DECLARE nb_en_cours INT DEFAULT 0;
     DECLARE patient_exist INT DEFAULT 0;
     DECLARE medecin_exist INT DEFAULT 0;
 
-    -- Vérifier si le patient existe
-    SELECT COUNT(*) INTO patient_exist
-    FROM patients
-    WHERE id_patient = p_id_patient;
+    -- 1. Vérifier si le patient existe
+    SELECT COUNT(*) INTO patient_exist FROM patients WHERE id_patient = p_id_patient;
     IF patient_exist = 0 THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Patient introuvable';
     END IF;
 
-    -- Vérifier si une admission est déjà en cours pour ce patient
-    SELECT COUNT(*) INTO nb_en_cours
-    FROM admissions
+    -- 2. Vérifier si une admission est déjà en cours
+    SELECT COUNT(*) INTO nb_en_cours FROM admissions 
     WHERE id_patient = p_id_patient AND statut = 'En cours';
     IF nb_en_cours > 0 THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Admission déjà en cours';
     END IF;
 
-    -- Vérifier la validité de la date
-    IF p_date_admission < CURDATE() THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Date d''admission invalide';
-    END IF;
-
-    -- Vérifier le service
+    -- 3. Vérifier le service et le motif
     IF p_service IS NULL OR p_service = '' THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Le service est obligatoire';
     END IF;
 
-    -- Vérifier le motif
     IF p_motif IS NULL OR p_motif = '' THEN
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Le motif est obligatoire';
     END IF;
 
-    -- Vérifier le médecin si fourni
-    IF p_id_medecin IS NOT NULL THEN
-        SELECT COUNT(*) INTO medecin_exist
-        FROM utilisateurs
+    -- 4. Vérifier le médecin (role 'medecin')
+    IF p_id_medecin IS NOT NULL AND p_id_medecin > 0 THEN
+        SELECT COUNT(*) INTO medecin_exist FROM utilisateurs 
         WHERE id_user = p_id_medecin AND role='medecin';
         IF medecin_exist = 0 THEN
             SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Médecin invalide';
         END IF;
     END IF;
 
-    -- Vérifier la disponibilité de la chambre
-    IF check_chambre_disponible(p_id_chambre) = 0 THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Chambre complète';
-    END IF;
-
-    -- Insérer l’admission
+    -- 5. INSERTION 
+    -- Note : On laisse le TRIGGER s'occuper des logs, mais la table DOIT exister
     INSERT INTO admissions(
-        id_patient, date_admission, service, motif, type_admission,
-        id_chambre, id_medecin, statut
+        id_patient, 
+        date_admission, 
+        service, 
+        motif, 
+        type_admission,
+        id_chambre, 
+        id_medecin, 
+        statut
     )
     VALUES(
-        p_id_patient, p_date_admission, p_service, p_motif, IFNULL(p_type_admission,'Normal'),
-        p_id_chambre, p_id_medecin, 'En cours'
+        p_id_patient, 
+        p_date_admission, 
+        p_service, 
+        p_motif, 
+        IFNULL(p_type_admission,'Normal'),
+        p_id_chambre, 
+        p_id_medecin, 
+        'En cours'
     );
 
-    -- Retourner l’ID de l’admission créée
-    SELECT LAST_INSERT_ID() AS id_admission;
+    -- IMPORTANT: On retire le SELECT LAST_INSERT_ID() car il cause des erreurs 
+    -- de synchronisation avec le closeCursor() en PHP.
 END$$
 
 CREATE DEFINER=`root`@`localhost` PROCEDURE `sp_AjouterUtilisateur` (IN `p_nom` VARCHAR(50), IN `p_prenom` VARCHAR(50), IN `p_email` VARCHAR(100), IN `p_password` VARCHAR(255), IN `p_role` VARCHAR(20), IN `p_specialite` VARCHAR(100), IN `p_tel` VARCHAR(20), IN `p_cin` VARCHAR(20))   BEGIN
@@ -407,98 +405,21 @@ CREATE TABLE `admissions` (
   `id_patient` int(11) NOT NULL,
   `id_medecin` int(11) DEFAULT NULL,
   `id_chambre` int(11) DEFAULT NULL,
+  `date_admission` datetime NOT NULL,
+  `date_sortie` datetime DEFAULT NULL,
   `service` varchar(100) NOT NULL,
   `motif` text NOT NULL,
-  `statut` enum('En cours','Terminé') DEFAULT 'En cours',
-  `type_admission` enum('Normal','Urgent') DEFAULT 'Normal',
-  `date_admission` datetime NOT NULL DEFAULT current_timestamp(),
-  `date_sortie` datetime DEFAULT NULL,
-  `created_at` datetime DEFAULT current_timestamp(),
-  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp()
+  `type_admission` varchar(50) DEFAULT 'Normal',
+  `statut` varchar(50) DEFAULT 'En cours'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
--- Déclencheurs `admissions`
+-- Déchargement des données de la table `admissions`
 --
-DELIMITER $$
-CREATE TRIGGER `trg_admissions_delete` BEFORE DELETE ON `admissions` FOR EACH ROW BEGIN
-    -- Archiver l'admission avant suppression
-    INSERT INTO admissions_archive
-    SELECT *, NOW(), NULL, 'Suppression'
-    FROM admissions
-    WHERE id_admission = OLD.id_admission;
 
-    -- Ajouter un log de suppression
-    INSERT INTO admission_logs(id_admission, action, description)
-    VALUES (OLD.id_admission, 'suppression', 'Admission archivée avant suppression');
-
-    -- Mettre à jour l'état de la chambre
-    UPDATE chambres
-    SET etat = IF(
-        (SELECT COUNT(*) FROM admissions WHERE id_chambre = OLD.id_chambre AND statut='En cours') >= capacite,
-        'complet', 'libre'
-    )
-    WHERE id_chambre = OLD.id_chambre;
-END
-$$
-DELIMITER ;
-DELIMITER $$
-CREATE TRIGGER `trg_admissions_insert` AFTER INSERT ON `admissions` FOR EACH ROW BEGIN
-    -- Ajouter un log d'ajout
-    INSERT INTO admission_logs(id_admission, action, description)
-    VALUES (NEW.id_admission, 'ajout', CONCAT('Admission ajoutée pour patient ID ', NEW.id_patient));
-
-    -- Créer un suivi initial pour le patient
-    INSERT INTO suivis(id_patient, date_suivi, commentaire)
-    VALUES (NEW.id_patient, CURDATE(), 'Admission nouvellement ajoutée');
-
-    -- Créer un traitement initial
-    INSERT INTO traitements(id_patient, description, date_traitement, medicament, suivi)
-    VALUES (NEW.id_patient, 'Consultation initiale', CURDATE(), 'Aucun', 'En attente');
-
-    -- Mettre à jour l'état de la chambre
-    UPDATE chambres
-    SET etat = IF(
-        (SELECT COUNT(*) FROM admissions WHERE id_chambre = NEW.id_chambre AND statut='En cours') >= capacite,
-        'complet', 'libre'
-    )
-    WHERE id_chambre = NEW.id_chambre;
-END
-$$
-DELIMITER ;
-DELIMITER $$
-CREATE TRIGGER `trg_admissions_update` AFTER UPDATE ON `admissions` FOR EACH ROW BEGIN
-    -- Mettre à jour l'état de la chambre si le patient change de chambre ou de statut
-    IF OLD.id_chambre <> NEW.id_chambre OR OLD.statut <> NEW.statut THEN
-        UPDATE chambres
-        SET etat = IF(
-            (SELECT COUNT(*) FROM admissions WHERE id_chambre = NEW.id_chambre AND statut='En cours') >= capacite,
-            'complet', 'libre'
-        )
-        WHERE id_chambre = NEW.id_chambre;
-    END IF;
-
-    -- Mettre à jour le KPI cache si la date ou le statut change
-    IF OLD.statut <> NEW.statut OR OLD.date_admission <> NEW.date_admission THEN
-        UPDATE kpi_cache
-        SET total = (SELECT COUNT(*) FROM admissions WHERE YEAR(date_admission) = YEAR(NEW.date_admission)),
-            en_cours = (SELECT COUNT(*) FROM admissions WHERE statut='En cours' AND YEAR(date_admission) = YEAR(NEW.date_admission)),
-            termine = (SELECT COUNT(*) FROM admissions WHERE statut='Terminé' AND YEAR(date_admission) = YEAR(NEW.date_admission))
-        WHERE year = YEAR(NEW.date_admission);
-    END IF;
-
-    -- Enregistrer les changements importants dans les logs
-    IF OLD.statut <> NEW.statut OR OLD.type_admission <> NEW.type_admission OR OLD.motif <> NEW.motif THEN
-        INSERT INTO admission_logs(id_admission, action, description)
-        VALUES (NEW.id_admission, 'modification', CONCAT(
-            'Changements: statut ', OLD.statut,'→',NEW.statut,
-            ', type ', OLD.type_admission,'→',NEW.type_admission,
-            ', motif ', OLD.motif,'→',NEW.motif
-        ));
-    END IF;
-END
-$$
-DELIMITER ;
+INSERT INTO `admissions` (`id_admission`, `id_patient`, `id_medecin`, `id_chambre`, `date_admission`, `date_sortie`, `service`, `motif`, `type_admission`, `statut`) VALUES
+(4, 44, 9, 8, '2026-01-18 00:00:00', '2026-01-18 02:53:30', 'Cardiologie', 'rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr', 'Urgent', 'En cours'),
+(7, 16, 1, 9, '2026-01-18 00:00:00', NULL, 'Pédiatrie', 'lllllllllllllllllllllllllllllllllllllll', 'Urgent', 'En cours');
 
 -- --------------------------------------------------------
 
@@ -522,6 +443,20 @@ CREATE TABLE `admissions_archive` (
   `archived_at` datetime DEFAULT current_timestamp(),
   `archived_by` int(11) DEFAULT NULL,
   `archive_reason` varchar(255) DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Structure de la table `admission_logs`
+--
+
+CREATE TABLE `admission_logs` (
+  `id_log` int(11) NOT NULL,
+  `id_admission` int(11) DEFAULT NULL,
+  `action` enum('ajout','modification','suppression') DEFAULT NULL,
+  `description` text DEFAULT NULL,
+  `created_at` datetime DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -583,7 +518,9 @@ INSERT INTO `archives_utilisateurs` (`id_archive`, `id_user`, `nom`, `prenom`, `
 (3, 8, 'BIRAM', 'nada', 'biram@gmail.com', 'medecin', 'geniraliste', '671399566', 'TT123', '2026005', '2026-01-16 22:47:21'),
 (4, 8, 'BIRAM', 'nada', 'biram@gmail.com', 'medecin', 'geniraliste', '671399566', 'TT123', '2026005', '2026-01-16 22:47:21'),
 (5, 11, 'BIRAM', 'nada', 'tolabyinssaf45@gmail.com', 'medecin', 'geniraliste', '671399566', 'TT123UU', '2026007', '2026-01-17 11:34:39'),
-(6, 11, 'BIRAM', 'nada', 'tolabyinssaf45@gmail.com', 'medecin', 'geniraliste', '671399566', 'TT123UU', '2026007', '2026-01-17 11:34:39');
+(6, 11, 'BIRAM', 'nada', 'tolabyinssaf45@gmail.com', 'medecin', 'geniraliste', '671399566', 'TT123UU', '2026007', '2026-01-17 11:34:39'),
+(7, 13, 'BIRAM', 'nada', 'tolabyinssaf12k3@gmail.com', 'medecin', 'geniraliste', '671399566', 'TT123JJ', '2026008', '2026-01-18 02:50:41'),
+(8, 13, 'BIRAM', 'nada', 'tolabyinssaf12k3@gmail.com', 'medecin', 'geniraliste', '671399566', 'TT123JJ', '2026008', '2026-01-18 02:50:41');
 
 -- --------------------------------------------------------
 
@@ -593,12 +530,29 @@ INSERT INTO `archives_utilisateurs` (`id_archive`, `id_user`, `nom`, `prenom`, `
 
 CREATE TABLE `chambres` (
   `id_chambre` int(11) NOT NULL,
-  `numero_chambre` varchar(255) NOT NULL,
-  `service` enum('Urgences','Cardiologie','Pédiatrie','Réanimation','Chirurgie') NOT NULL,
-  `etage` int(11) NOT NULL,
-  `statut` enum('Libre','Occupée') NOT NULL,
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+  `numero_chambre` varchar(20) DEFAULT NULL,
+  `service` varchar(100) DEFAULT NULL,
+  `capacite` int(11) NOT NULL,
+  `etat` enum('libre','complet') DEFAULT 'libre'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Déchargement des données de la table `chambres`
+--
+
+INSERT INTO `chambres` (`id_chambre`, `numero_chambre`, `service`, `capacite`, `etat`) VALUES
+(1, 'A', 'Check-up', 2, 'libre'),
+(2, '12', 'Médecine', 1, 'libre'),
+(3, '16', 'Urgences', 2, 'libre'),
+(7, 'C2', 'Cardiologie', 2, 'libre'),
+(8, 'C1', 'Cardiologie', 1, 'libre'),
+(9, 'P1', 'Pédiatrie', 2, 'complet'),
+(1, 'A', 'Check-up', 2, 'libre'),
+(2, '12', 'Médecine', 1, 'libre'),
+(3, '16', 'Urgences', 2, 'libre'),
+(7, 'C2', 'Cardiologie', 2, 'libre'),
+(8, 'C1', 'Cardiologie', 1, 'libre'),
+(9, 'P1', 'Pédiatrie', 2, 'complet');
 
 -- --------------------------------------------------------
 
@@ -621,6 +575,14 @@ CREATE TABLE `factures` (
   `type_couverture` enum('CNSS','CNOPS','MUTUELLE_PRIVEE','AUCUN') NOT NULL,
   `statut_paiement` enum('Payé','Annulé') NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Déchargement des données de la table `factures`
+--
+
+INSERT INTO `factures` (`id_facture`, `id_admission`, `id_patient`, `id_utilisateur`, `date_facture`, `numero_facture`, `nb_jours`, `prix_unitaire_jour`, `frais_actes_medicaux`, `montant_total`, `mode_paiement`, `type_couverture`, `statut_paiement`) VALUES
+(3, 4, 44, 4, '2026-01-18 01:53:30', 'FAC-20260118-954', 1, 600, 150, 750.00, 'Espèces', '', 'Payé'),
+(4, 6, 16, 4, '2026-01-18 02:07:51', 'FAC-20260118-708', 1, 600, 150, 750.00, 'Espèces', '', 'Payé');
 
 -- --------------------------------------------------------
 
@@ -890,6 +852,35 @@ INSERT INTO `soins_patients` (`id_soin_patient`, `id_admission`, `id_prestation`
 (5, 3, 1, 1, '2026-01-13 02:21:39', 6, '', 44, '12/8', 78, 0, 'fer', ''),
 (6, 6, 1, 1, '2026-01-16 11:13:23', 6, '', 12, '12/8', 75, 0, 'fer', '');
 
+--
+-- Déclencheurs `soins_patients`
+--
+DELIMITER $$
+CREATE TRIGGER `after_soin_update_total` AFTER INSERT ON `soins_patients` FOR EACH ROW BEGIN
+    DECLARE v_total_soins DECIMAL(10,2);
+    DECLARE v_jours INT;
+    DECLARE v_prix_jour DECIMAL(10,2);
+
+    -- 1. Calculer la somme de TOUS les soins actuels pour cette admission
+    SELECT SUM(p.prix_unitaire) INTO v_total_soins
+    FROM soins_patients s
+    JOIN prestations p ON s.id_prestation = p.id_prestation
+    WHERE s.id_admission = NEW.id_admission;
+
+    -- 2. Récupérer les infos de base de la facture
+    SELECT nb_jours, prix_unitaire_jour INTO v_jours, v_prix_jour
+    FROM factures
+    WHERE id_admission = NEW.id_admission;
+
+    -- 3. Mettre à jour la facture avec le montant 
+    UPDATE factures 
+    SET frais_actes_medicaux = IFNULL(v_total_soins, 0),
+        montant_total = (v_jours * v_prix_jour) + IFNULL(v_total_soins, 0)
+    WHERE id_admission = NEW.id_admission;
+END
+$$
+DELIMITER ;
+
 -- --------------------------------------------------------
 
 --
@@ -927,7 +918,8 @@ CREATE TABLE `suivis` (
 INSERT INTO `suivis` (`id_suivi`, `id_patient`, `id_medecin`, `date_suivi`, `commentaire`, `status`) VALUES
 (7, 16, 0, '2026-01-05', 'suivis de routine', 'Terminé'),
 (8, 16, 0, '2026-04-04', 'sssssssssssss', 'En cours'),
-(9, 43, 0, '2026-01-18', 'jjjjjjjj', 'En cours');
+(9, 43, 0, '2026-01-18', 'jjjjjjjj', 'Terminé'),
+(19, 16, 0, '2026-01-18', 'suivis de routine', 'Terminé');
 
 --
 -- Déclencheurs `suivis`
@@ -1048,8 +1040,7 @@ INSERT INTO `utilisateurs` (`id_user`, `cin`, `matricule`, `nom`, `prenom`, `ema
 (7, '', '', 'tolaby', 'inssaf jjjj', 'inss@gmail.com', '1212', 611546099, '', '\'default_avatar.png\'', 'admin', '', 'actif', '2026-01-16', NULL, '2026-01-16 00:15:09'),
 (9, 'TT123', '2026005', 'BIRAM', 'nada', 'tolabyinssaf123@gmail.com', '$2y$10$Cz3G9WJE7ZA6ZLLtuDG4YOdA5eT08nJkRaFt4gIsQTcUj7EgFizZu', 671399566, '', '\'default_avatar.png\'', 'medecin', 'geniraliste', 'actif', '2026-01-16', NULL, '2026-01-16 21:50:50'),
 (10, 'KK45678', '2026006', 'BIRAM', 'nada', 'tolabyinssaf4@gmail.com', '$2y$10$FT5jH0qdauFK8620neMj4e4DCeaY0sMNa7E6PIuqeF/ER482TGRzu', 671399566, '', '\'default_avatar.png\'', 'infirmier', '', 'actif', '2026-01-16', NULL, '2026-01-16 21:52:31'),
-(12, 'JJJJ456K', '2026008', 'INSSAF', 'tolaby', 'tolabyinssaf78@gmail.com', '$2y$10$MWyGgJQIddVWi65ufYG5X.XRXMCQE.LEM1ZkyGKYvp5NVmXC/riDG', 671307458, '', '\'default_avatar.png\'', 'secretaire', '', 'actif', '2026-01-16', NULL, '2026-01-16 22:10:31'),
-(13, 'TT123JJ', '2026008', 'BIRAM', 'nada', 'tolabyinssaf12k3@gmail.com', '$2y$10$uKHtLKjmUZlWKxufHAb4beffQ7nAf9d4MBbkQKJhCJLh/rNv4VUFm', 671399566, '', '\'default_avatar.png\'', 'medecin', 'geniraliste', 'actif', '2026-01-17', NULL, '2026-01-17 10:35:18');
+(12, 'JJJJ456K', '2026008', 'INSSAF', 'tolaby', 'tolabyinssaf78@gmail.com', '$2y$10$MWyGgJQIddVWi65ufYG5X.XRXMCQE.LEM1ZkyGKYvp5NVmXC/riDG', 671307458, '', '\'default_avatar.png\'', 'secretaire', '', 'actif', '2026-01-16', NULL, '2026-01-16 22:10:31');
 
 --
 -- Déclencheurs `utilisateurs`
@@ -1128,7 +1119,7 @@ CREATE TABLE `v_admissions_sexe` (
 --
 CREATE TABLE `v_admissions_type` (
 `year` int(4)
-,`type_admission` enum('Normal','Urgent')
+,`type_admission` varchar(50)
 ,`total` bigint(21)
 );
 
@@ -1190,7 +1181,7 @@ CREATE TABLE `v_statistiques_mensuelles` (
 -- (Voir ci-dessous la vue réelle)
 --
 CREATE TABLE `v_status_counts` (
-`statut` enum('En cours','Terminé')
+`statut` varchar(50)
 ,`service` varchar(100)
 ,`total` bigint(21)
 ,`year` int(4)
@@ -1330,10 +1321,7 @@ CREATE ALGORITHM=UNDEFINED DEFINER=`root`@`localhost` SQL SECURITY DEFINER VIEW 
 -- Index pour la table `admissions`
 --
 ALTER TABLE `admissions`
-  ADD PRIMARY KEY (`id_admission`),
-  ADD KEY `id_patient` (`id_patient`),
-  ADD KEY `id_medecin` (`id_medecin`),
-  ADD KEY `id_chambre` (`id_chambre`);
+  ADD PRIMARY KEY (`id_admission`);
 
 --
 -- Index pour la table `admissions_archive`
@@ -1355,12 +1343,6 @@ ALTER TABLE `antecedents`
 --
 ALTER TABLE `archives_utilisateurs`
   ADD PRIMARY KEY (`id_archive`);
-
---
--- Index pour la table `chambres`
---
-ALTER TABLE `chambres`
-  ADD PRIMARY KEY (`id_chambre`);
 
 --
 -- Index pour la table `factures`
@@ -1455,7 +1437,7 @@ ALTER TABLE `utilisateurs`
 -- AUTO_INCREMENT pour la table `admissions`
 --
 ALTER TABLE `admissions`
-  MODIFY `id_admission` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
+  MODIFY `id_admission` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
 
 --
 -- AUTO_INCREMENT pour la table `antecedents`
@@ -1467,19 +1449,13 @@ ALTER TABLE `antecedents`
 -- AUTO_INCREMENT pour la table `archives_utilisateurs`
 --
 ALTER TABLE `archives_utilisateurs`
-  MODIFY `id_archive` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
-
---
--- AUTO_INCREMENT pour la table `chambres`
---
-ALTER TABLE `chambres`
-  MODIFY `id_chambre` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id_archive` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
 
 --
 -- AUTO_INCREMENT pour la table `factures`
 --
 ALTER TABLE `factures`
-  MODIFY `id_facture` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+  MODIFY `id_facture` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
 
 --
 -- AUTO_INCREMENT pour la table `historique_statuts`
@@ -1533,7 +1509,7 @@ ALTER TABLE `soins_patients`
 -- AUTO_INCREMENT pour la table `suivis`
 --
 ALTER TABLE `suivis`
-  MODIFY `id_suivi` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
+  MODIFY `id_suivi` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=20;
 
 --
 -- AUTO_INCREMENT pour la table `utilisateurs`

@@ -1,40 +1,46 @@
 <?php
 session_start();
-include("../config/connexion.php");
+// Vérifiez que ce chemin est correct selon votre structure de dossiers
+include("../config/connexion.php"); 
 
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'medecin') {
     header("Location: login.php");
     exit;
 }
 
-$user_id = $_SESSION['user_id'];
+$user_id = (int)$_SESSION['user_id'];
 
-// 1. Infos médecin pour le Header
+// 1. Récupérer les infos du médecin (Correction de la variable $stmt_med)
 $stmt_med = $pdo->prepare("SELECT nom, prenom FROM utilisateurs WHERE id_user = ?");
 $stmt_med->execute([$user_id]);
 $medecin = $stmt_med->fetch(PDO::FETCH_ASSOC);
 
-// 2. Récupérer les patients hospitalisés (Adapté à votre DB)
-$stmt = $pdo->prepare("
+// 2. Récupérer les patients (Correction de la variable $stmt)
+// On utilise $stmt_hosp pour ne pas confondre avec $stmt_med
+$stmt_hosp = $pdo->prepare("
     SELECT 
         a.id_admission,
-        a.chambre, 
         a.service, 
         a.date_admission, 
-        a.status,
+        a.type_admission AS statut,
         p.id_patient,
         p.nom, 
         p.prenom,
+        IFNULL(c.numero_chambre, 'N/A') as chambre,
         DATEDIFF(NOW(), a.date_admission) as jours
     FROM admissions a
-    JOIN patients p ON a.id_patient = p.id_patient
-    WHERE a.id_medecin = ? AND a.date_sortie IS NULL
-    ORDER BY a.chambre ASC
+    INNER JOIN patients p ON a.id_patient = p.id_patient
+    LEFT JOIN chambres c ON a.id_chambre = c.id_chambre 
+    WHERE a.id_medecin = :id_med 
+    AND (a.date_sortie IS NULL OR a.date_sortie = '0000-00-00' OR a.date_sortie = '')
+    ORDER BY a.date_admission DESC
 ");
-$stmt->execute([$user_id]);
-$admis = $stmt->fetchAll(PDO::FETCH_ASSOC);
-?>
 
+// L'erreur "Call to a member function execute() on null" venait d'ici 
+// car $stmt n'était pas défini ou mal nommé au-dessus.
+$stmt_hosp->execute(['id_med' => $user_id]);
+$admis = $stmt_hosp->fetchAll(PDO::FETCH_ASSOC);
+?>
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -170,49 +176,52 @@ $admis = $stmt->fetchAll(PDO::FETCH_ASSOC);
             </div>
         <?php else: ?>
             <div class="rooms-grid">
-                <?php foreach ($admis as $p): ?>
-                    <div class="card-patient">
-                        <div class="chambre-tag">Chambre <?= htmlspecialchars($p['chambre']) ?></div>
-                        
-                        <div class="patient-info">
-                            <h2><?= htmlspecialchars($p['prenom'] . ' ' . $p['nom']) ?></h2>
-                            
-                            <div class="detail-row">
-                                <i class="fa-solid fa-stethoscope"></i>
-                                Service : <?= htmlspecialchars($p['service']) ?>
-                            </div>
-                            <div class="detail-row">
-                                <i class="fa-solid fa-calendar-day"></i>
-                                Admis le : <?= date('d/m/Y', strtotime($p['date_admission'])) ?>
-                            </div>
+    <?php foreach ($admis as $p): ?>
+    <div class="card-patient">
+        <div class="chambre-tag">Chambre <?= htmlspecialchars($p['chambre'] ?? 'S.A') ?></div>
+        
+        <div class="patient-info">
+            <h2><?= htmlspecialchars(strtoupper($p['nom']) . ' ' . $p['prenom']) ?></h2>
+            
+            <div class="detail-row">
+                <i class="fa-solid fa-stethoscope"></i>
+                Service : <?= htmlspecialchars($p['service']) ?>
+            </div>
+            <div class="detail-row">
+                <i class="fa-solid fa-calendar-day"></i>
+                Admis le : <?= date('d/m/Y', strtotime($p['date_admission'])) ?>
+            </div>
 
-                            <?php 
-                                $statusClass = 'status-stable';
-                                if($p['status'] == 'Urgence') $statusClass = 'status-urgence';
-                                if($p['status'] == 'Observation') $statusClass = 'status-observation';
-                            ?>
-                            <span class="status-badge <?= $statusClass ?>">
-                                <i class="fa-solid fa-circle-info me-1"></i> <?= htmlspecialchars($p['status']) ?>
-                            </span>
-                        </div>
+            <?php 
+                // Correction des correspondances de status
+                $statusClass = 'status-stable';
+                $currentStatut = $p['statut'];
+                
+                if($currentStatut == 'Urgent') $statusClass = 'status-urgence';
+                elseif($currentStatut == 'Programme') $statusClass = 'status-observation';
+            ?>
+            <span class="status-badge <?= $statusClass ?>">
+                <i class="fa-solid fa-circle-info me-1"></i> <?= htmlspecialchars($currentStatut) ?>
+            </span>
+        </div>
 
-                        <div class="jours-count">
-                            <i class="fa-solid fa-clock-rotate-left me-2" style="color: var(--primary);"></i>
-                            Hospitalisé depuis <?= $p['jours'] ?> jour(s)
-                        </div>
+        <div class="jours-count">
+            <i class="fa-solid fa-clock-rotate-left me-2" style="color: var(--primary);"></i>
+            Hospitalisé depuis <?= $p['jours'] ?> jour(s)
+        </div>
 
-                        <div class="card-actions">
-                            <a href="ajouter_suivi.php?id=<?= $p['id_patient'] ?>" class="btn-action btn-visit">
-                                <i class="fa-solid fa-file-medical me-1"></i> Visite
-                            </a>
-                            <a href="traiter_sortie.php?id_adm=<?= $p['id_admission'] ?>" 
-                               class="btn-action btn-exit" 
-                               onclick="return confirm('Voulez-vous valider la sortie médicale ?')">
-                                <i class="fa-solid fa-right-from-bracket me-1"></i> Sortie
-                            </a>
-                        </div>
-                    </div>
-                <?php endforeach; ?>
+        <div class="card-actions">
+            <a href="ajouter_suivi.php?id=<?= $p['id_patient'] ?>" class="btn-action btn-visit">
+                <i class="fa-solid fa-file-medical me-1"></i> Visite
+            </a>
+            <a href="traiter_sortie.php?id_adm=<?= $p['id_admission'] ?>" 
+               class="btn-action btn-exit" 
+               onclick="return confirm('Voulez-vous valider la sortie médicale ?')">
+                <i class="fa-solid fa-right-from-bracket me-1"></i> Sortie
+            </a>
+        </div>
+    </div>
+<?php endforeach; ?>
             </div>
         <?php endif; ?>
     </main>

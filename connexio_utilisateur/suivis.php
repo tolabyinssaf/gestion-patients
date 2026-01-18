@@ -275,7 +275,7 @@ $medecin = $stmtMed->fetch(PDO::FETCH_ASSOC);
                                 <?= htmlspecialchars($s['prenom'].' '.$s['nom']) ?>
                             </div>
                             <?php if($s['status'] === 'Terminé'): ?>
-                                <span class="badge-status status-termine">Dossier Terminé</span>
+                                <span class="badge-status status-termine">Suivi Terminé</span>
                             <?php else: ?>
                                 <span class="badge-status status-encours">Suivi Actif</span>
                             <?php endif; ?>
