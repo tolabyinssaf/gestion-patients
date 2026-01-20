@@ -244,12 +244,13 @@ $user = $stmt_user->fetch(PDO::FETCH_ASSOC);
 
 <div class="wrapper">
     <aside class="sidebar">
-        <h3>Menu Gestion</h3>
-        <a href="dashboard_secretaire.php"><i class="fa-solid fa-chart-line"></i> Tableau de bord</a>
+        <h3 style="color:rgba(255,255,255,0.3); font-size:11px; text-transform:uppercase; margin-bottom:20px; padding-left:12px;">Menu Gestion</h3>
+        <a href="dashboard_secretaire.php"><i class="fa-solid fa-chart-line"></i> Vue Générale</a>
         <a href="patients_secr.php" class="active"><i class="fa-solid fa-user-group"></i> Patients</a>
-        <a href="admissions.php"><i class="fa-solid fa-door-open"></i> Salle d'attente</a>
-        <a href="suivis.php"><i class="fa-solid fa-calendar-check"></i> Suivis du jour</a>
+         <a href="../admission/admissions_list.php"><i class="fa-solid fa-hospital-user"></i> Admissions</a>
+        <a href="suivis.php"><i class="fa-solid fa-calendar-check"></i> Suivis</a>
         <a href="caisse.php"><i class="fa-solid fa-wallet"></i> Caisse & Factures</a>
+         <a href="profil_secretaire.php"><i class="fa-solid fa-user"></i> Profil</a>
         <div style="height: 1px; background: rgba(255,255,255,0.1); margin: 20px 0;"></div>
         <a href="../connexio_utilisateur/deconnexion.php" style="color: #fda4af;"><i class="fa-solid fa-power-off"></i> Déconnexion</a>
     </aside>

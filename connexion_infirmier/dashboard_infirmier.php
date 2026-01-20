@@ -107,10 +107,166 @@ $patients_actifs = $pdo->query($sql_patients)->fetchAll(PDO::FETCH_ASSOC);
         .bg-hosp { background: #fff7ed; color: #ea580c; }
         .bg-care { background: #f0fdf4; color: #10b981; }
         
-        .section-box { background: var(--white); padding: 25px; border-radius: 20px; border: 1px solid var(--border); margin-bottom: 30px; }
-        table { width:100%; border-collapse:collapse; }
-        th { text-align:left; padding:12px; background:#f8fafc; color:#64748b; font-size:11px; text-transform:uppercase; }
-        td { padding:15px 12px; border-bottom:1px solid #f1f5f9; font-size:14px; }
+        .section-box { 
+            background: var(--white); 
+            padding: 30px; 
+            border-radius: 20px; 
+            border: 1px solid var(--border); 
+            margin-bottom: 30px; 
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+        }
+        
+        /* ======================== */
+        /* TABLEAU AMÉLIORÉ */
+        /* ======================== */
+        .table-container {
+            background: var(--white);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+        }
+        
+        table { 
+            width: 100%; 
+            border-collapse: collapse;
+            font-family: 'Inter', sans-serif;
+        }
+        
+        thead {
+            background: #1e293b;
+        }
+        
+        th { 
+            text-align: left; 
+            padding: 18px 20px; 
+            background: #1e293b; 
+            color: #e2e8f0 !important; 
+            font-size: 13px !important; 
+            text-transform: uppercase;
+            font-weight: 700 !important;
+            letter-spacing: 0.5px;
+            border-bottom: 2px solid #334155 !important;
+        }
+        
+        tbody tr {
+            border-bottom: 1px solid #f1f5f9;
+            transition: all 0.2s ease;
+        }
+        
+        tbody tr:nth-child(even) {
+            background-color: #f8fafc;
+        }
+        
+        tbody tr:nth-child(odd) {
+            background-color: #ffffff;
+        }
+        
+        tbody tr:hover {
+            background-color: #f1f5f9 !important;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+        
+        td { 
+            padding: 20px !important; 
+            vertical-align: middle !important;
+            border-bottom: 1px solid #e2e8f0 !important;
+            color: #334155 !important;
+            font-weight: 500 !important;
+            font-size: 15px !important;
+        }
+        
+        /* Texte en gras plus foncé */
+        td .fw-semibold {
+            color: #1e293b !important;
+            font-weight: 600 !important;
+            font-size: 16px !important;
+        }
+        
+        /* Badges améliorés (sans bleu) */
+        .badge-cin {
+            background: #f8fafc;
+            color: #475569 !important;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            border: 1px solid #e2e8f0;
+            display: inline-block;
+        }
+        
+        /* Date d'admission */
+        td .text-primary {
+            color: #0f766e !important;
+            font-weight: 700 !important;
+            font-size: 15px !important;
+        }
+        
+        /* Bouton Saisir Soin - Couleur teal au lieu de bleu */
+        .btn-soin {
+            background: #0f766e !important;
+            color: white !important;
+            border: none !important;
+            padding: 10px 24px !important;
+            border-radius: 10px !important;
+            font-weight: 600 !important;
+            font-size: 14px !important;
+            transition: all 0.3s ease !important;
+        }
+        
+        .btn-soin:hover {
+            background: #0d635c !important;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(15, 118, 110, 0.2);
+        }
+        
+        .btn-soin i {
+            margin-right: 6px;
+        }
+        
+        /* État vide */
+        .empty-state {
+            padding: 50px 20px;
+            text-align: center;
+            color: #64748b;
+        }
+        
+        .empty-state i {
+            font-size: 3rem;
+            margin-bottom: 15px;
+            opacity: 0.4;
+        }
+        
+        .empty-state h5 {
+            color: #475569;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+        
+        /* Header de section */
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f0fdfa;
+        }
+        
+        .section-header h5 {
+            font-weight: 700;
+            margin: 0;
+            color: #1e293b;
+            font-size: 1.25rem;
+        }
+        
+        .section-header i {
+            color: #0f766e;
+            margin-right: 10px;
+        }
+        /* ======================== */
+        /* FIN DU TABLEAU AMÉLIORÉ */
+        /* ======================== */
     </style>
 </head>
 <body>
@@ -126,10 +282,10 @@ $patients_actifs = $pdo->query($sql_patients)->fetchAll(PDO::FETCH_ASSOC);
 <div class="wrapper">
     <aside class="sidebar">
         <h3 style="color:rgba(255,255,255,0.3); font-size:11px; text-transform:uppercase; margin-bottom:20px; padding-left:12px;">Menu Infirmier</h3>
-        <a href="dashboard_infirmier.php" class="active"><i class="fa-solid fa-chart-line"></i> Tableau de bord</a>
-        <a href="liste_patients_inf.php"><i class="fa-solid fa-user-injured"></i> Liste des Patients</a>
-        <a href="saisir_soins.php"><i class="fa-solid fa-notes-medical"></i> Saisir un Soin</a>
+        <a href="dashboard_infirmier.php" class="active"><i class="fa-solid fa-chart-line"></i> Vue Générale</a>
+        <a href="liste_patients_inf.php"><i class="fa-solid fa-user-injured"></i> Patients</a>
         <a href="planning.php"><i class="fa-solid fa-calendar-alt"></i> Planning</a>
+        <a href="profil_infirmier.php"><i class="fa-solid fa-user"></i> Profil</a>
         <div style="height: 1px; background: rgba(255,255,255,0.1); margin: 20px 0;"></div>
         <a href="../connexio_utilisateur/deconnexion.php" style="color: #fda4af;"><i class="fa-solid fa-power-off"></i> Déconnexion</a>
     </aside>
@@ -161,39 +317,61 @@ $patients_actifs = $pdo->query($sql_patients)->fetchAll(PDO::FETCH_ASSOC);
             </div>
         </div>
 
-        <div class="section-box shadow-sm">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <h5 class="fw-bold mb-0"><i class="fa-solid fa-list-check me-2 text-primary"></i>Patients en attente de soins</h5>
+        <div class="section-box">
+            <div class="section-header">
+                <h5><i class="fa-solid fa-list-check"></i> Patients en attente de soins</h5>
             </div>
-            <div class="table-responsive">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Admission</th>
-                            <th>Patient</th>
-                            <th>CIN</th>
-                            <th class="text-end">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php if($patients_actifs): ?>
-                            <?php foreach($patients_actifs as $p): ?>
+            
+            <div class="table-container">
+                <div class="table-responsive">
+                    <table>
+                        <thead>
                             <tr>
-                                <td class="fw-bold text-primary"><?= date('d/m H:i', strtotime($p['date_admission'])) ?></td>
-                                <td class="fw-semibold"><?= htmlspecialchars($p['nom'].' '.$p['prenom']) ?></td>
-                                <td><span class="badge bg-light text-dark border"><?= $p['cin'] ?></span></td>
-                                <td class="text-end">
-                                    <a href="saisir_soins.php?id_adm=<?= $p['id_admission'] ?>" class="btn btn-sm btn-primary rounded-pill px-3">
-                                        <i class="fa-solid fa-plus-circle me-1"></i> Saisir Soin
-                                    </a>
-                                </td>
+                                <th style="width: 20%">Admission</th>
+                                <th style="width: 30%">Patient</th>
+                                <th style="width: 20%">CIN</th>
+                                <th style="width: 30%" class="text-end">Action</th>
                             </tr>
-                            <?php endforeach; ?>
-                        <?php else: ?>
-                            <tr><td colspan="4" class="text-center py-5 text-muted">Aucun patient hospitalisé actuellement.</td></tr>
-                        <?php endif; ?>
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody>
+                            <?php if($patients_actifs): ?>
+                                <?php foreach($patients_actifs as $p): ?>
+                                <tr>
+                                    <td class="fw-bold text-primary">
+                                        <i class="fa-solid fa-calendar-check me-2"></i>
+                                        <?= date('d/m/Y H:i', strtotime($p['date_admission'])) ?>
+                                    </td>
+                                    <td class="fw-semibold">
+                                        <i class="fa-solid fa-user-injured me-2 text-muted"></i>
+                                        <?= htmlspecialchars($p['prenom'] . ' ' . $p['nom']) ?>
+                                    </td>
+                                    <td>
+                                        <span class="badge-cin">
+                                            <i class="fa-solid fa-id-card me-1"></i>
+                                            <?= $p['cin'] ?>
+                                        </span>
+                                    </td>
+                                    <td class="text-end">
+                                        <a href="saisir_soins.php?id_adm=<?= $p['id_admission'] ?>" class="btn btn-soin">
+                                            <i class="fa-solid fa-plus-circle"></i> Saisir Soin
+                                        </a>
+                                    </td>
+                                </tr>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <tr>
+                                    <td colspan="4" class="text-center">
+                                        <div class="empty-state">
+                                            <i class="fa-solid fa-user-check"></i>
+                                            <h5>Aucun patient hospitalisé</h5>
+                                            <p>Tous les patients ont été pris en charge.</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </main>

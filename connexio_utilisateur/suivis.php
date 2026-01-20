@@ -9,6 +9,18 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'medecin') {
 
 $id_medecin = $_SESSION['user_id'];
 
+// --- 1. LOGIQUE DE MISE À JOUR EN TEMPS RÉEL (AJAX) ---
+if (isset($_GET['action']) && $_GET['action'] === 'fetch_status') {
+    $today = date('Y-m-d');
+    $pdo->query("UPDATE suivis SET status='Terminé' WHERE DATE(date_suivi) <= '$today' AND status != 'Terminé'");
+
+    $stmt = $pdo->prepare("SELECT id_suivi, status FROM suivis s JOIN patients p ON s.id_patient = p.id_patient WHERE p.id_medecin = ?");
+    $stmt->execute([$id_medecin]);
+    $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    echo json_encode($results);
+    exit;
+}
+
 /* ===== RÉCUPÉRER LES SUIVIS ===== */
 $stmt = $pdo->prepare("
     SELECT 
@@ -30,7 +42,8 @@ $suivis = $stmt->fetchAll(PDO::FETCH_ASSOC);
 /* ===== STATUT AUTOMATIQUE ===== */
 $today = date('Y-m-d');
 foreach ($suivis as $key => $s) {
-    if ($s['date_suivi'] <= $today && $s['status'] !== 'Terminé') {
+    $dateOnly = date('Y-m-d', strtotime($s['date_suivi']));
+    if ($dateOnly <= $today && $s['status'] !== 'Terminé') {
         $upd = $pdo->prepare("UPDATE suivis SET status='Terminé' WHERE id_suivi=?");
         $upd->execute([$s['id_suivi']]);
         $suivis[$key]['status'] = 'Terminé';
@@ -68,7 +81,6 @@ $medecin = $stmtMed->fetch(PDO::FETCH_ASSOC);
     * { margin:0; padding:0; box-sizing:border-box; font-family: 'Inter', sans-serif; }
     body { background: var(--bg-body); color: var(--text-main); }
 
-    /* ===== HEADER (CONSISTANT) ===== */
     header {
         background: var(--white);
         padding: 0 40px;
@@ -77,7 +89,9 @@ $medecin = $stmtMed->fetch(PDO::FETCH_ASSOC);
         justify-content: space-between;
         align-items: center;
         border-bottom: 1px solid var(--border);
-        position: sticky; top: 0; z-index: 100;
+        position: fixed;
+        top: 0; left: 0; right: 0; 
+        z-index: 1000;
     }
     .logo { height: 45px; }
     .user-pill {
@@ -89,11 +103,19 @@ $medecin = $stmtMed->fetch(PDO::FETCH_ASSOC);
         border: 1px solid rgba(15, 118, 110, 0.1);
     }
 
-    /* ===== LAYOUT ===== */
-    .container { display: flex; min-height: calc(100vh - 75px); }
+    .container { display: flex; padding-top: 75px; }
 
-    /* ===== SIDEBAR (CONSISTANT) ===== */
-    .sidebar { width: 260px; background: var(--sidebar-bg); padding: 24px 16px; flex-shrink: 0; }
+    .sidebar { 
+        width: 260px; 
+        background: var(--sidebar-bg); 
+        padding: 24px 16px; 
+        position: fixed; 
+        top: 75px; 
+        left: 0; 
+        bottom: 0; 
+        overflow-y: auto; 
+        z-index: 900;
+    }
     .sidebar h3 {
         color: rgba(255,255,255,0.3); font-size: 11px; 
         text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 20px; padding-left: 12px;
@@ -107,10 +129,13 @@ $medecin = $stmtMed->fetch(PDO::FETCH_ASSOC);
     .sidebar a:hover { background: rgba(255,255,255,0.05); color: #fff; }
     .sidebar a.active { background: var(--primary); color: #fff; }
 
-    /* ===== CONTENT ===== */
-    .content { flex: 1; padding: 40px; }
+    .content { 
+        flex: 1; 
+        padding: 40px; 
+        margin-left: 260px;
+        margin-right: 320px; 
+    }
     
-    /* TITRE AMELIORE */
     .page-header { 
         margin-bottom: 35px; 
         padding-bottom: 20px;
@@ -131,7 +156,6 @@ $medecin = $stmtMed->fetch(PDO::FETCH_ASSOC);
     .page-header h1 { font-size: 30px; font-weight: 800; color: var(--text-main); letter-spacing: -0.5px; }
     .subtitle { color: var(--text-muted); font-size: 15px; margin-top: 2px; }
 
-    /* ===== SUIVIS DESIGN (SANS ANIMATION) ===== */
     .timeline { position: relative; max-width: 950px; }
 
     .suivi-card {
@@ -144,7 +168,6 @@ $medecin = $stmtMed->fetch(PDO::FETCH_ASSOC);
         gap: 25px;
     }
 
-    /* Date Box */
     .suivi-date-box {
         display: flex;
         flex-direction: column;
@@ -182,7 +205,6 @@ $medecin = $stmtMed->fetch(PDO::FETCH_ASSOC);
         border-left: 5px solid var(--primary);
     }
 
-    /* Badges */
     .badge-status {
         font-size: 11px;
         padding: 6px 14px;
@@ -194,7 +216,6 @@ $medecin = $stmtMed->fetch(PDO::FETCH_ASSOC);
     .status-termine { background: #fee2e2; color: #dc2626; }
     .status-encours { background: #dcfce7; color: #16a34a; }
 
-    /* Buttons */
     .actions-group { display: flex; gap: 12px; margin-top: 10px; }
     .btn-action {
         padding: 10px 18px;
@@ -218,7 +239,14 @@ $medecin = $stmtMed->fetch(PDO::FETCH_ASSOC);
     .btn-del { color: #e11d48; }
     .btn-del:hover { background: #fff1f2; border-color: #e11d48; color: #e11d48; }
 
-    @media(max-width:900px){ .sidebar { display:none; } }
+    @media(max-width:1200px){ 
+        .content { margin-right: 0; }
+        .timeline-right { display: none; }
+    }
+    @media(max-width:900px){ 
+        .sidebar { display:none; } 
+        .content { margin-left: 0; }
+    }
 </style>
 </head>
 
@@ -233,88 +261,212 @@ $medecin = $stmtMed->fetch(PDO::FETCH_ASSOC);
 </header>
 
 <div class="container">
-    <aside class="sidebar">
-        <h3>Menu Médical</h3>
-        <a href="dashboard_medecin.php"><i class="fa-solid fa-chart-pie"></i> Tableau de bord</a>
-        <a href="patients.php"><i class="fa-solid fa-user-group"></i> Mes Patients</a>
-        <a href="suivis.php" class="active"><i class="fa-solid fa-file-medical"></i> Consultations</a>
-        <a href="../traitement/list.php"><i class="fa-solid fa-pills"></i> Traitements</a>
-        <a href="rendezvous.php"><i class="fa-solid fa-calendar-check"></i> Rendez-vous</a>
-        <div style="height: 1px; background: rgba(255,255,255,0.1); margin: 20px 0;"></div>
-        <a href="profil_medcin.php"><i class="fa-solid fa-user"></i> Profil</a>
-        <a href="deconnexion.php" style="color: #fda4af;"><i class="fa-solid fa-power-off"></i> Déconnexion</a>
+   <aside class="sidebar">
+        <h3 style="font-weight: 800;">Unité de Soins</h3>
+        <a href="dashboard_medecin.php"><i class="fa-solid fa-chart-line"></i> Vue Générale</a>
+        <a href="hospitalisation.php"><i class="fa-solid fa-bed-pulse"></i> Patients Admis</a>
+        <a href="patients.php"><i class="fa-solid fa-hospital-user"></i> Patients</a>
+        <a href="../traitement/list.php"><i class="fa-solid fa-file-prescription"></i> Traitements</a>
+        <a href="suivis.php" class="active"><i class="fa-solid fa-calendar-check"></i> Consultations</a>
+        <h3 style="font-weight: 800;">Analyse & Gestion</h3>
+        <a href="../admission/statistique.php"><i class="fa-solid fa-chart-pie"></i> Statistiques</a>
+        <a href="archives.php"><i class="fa-solid fa-box-archive"></i> Archives</a>
+        <a href="profil_medcin.php"><i class="fa-solid fa-user-gear"></i> Profil</a>
+        <div style="margin-top: 40px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+            <a href="deconnexion.php" style="color: #fda4af;"><i class="fa-solid fa-power-off"></i> Déconnexion</a>
+        </div>
     </aside>
 
-    <main class="content">
-        <div class="page-header">
-            <div class="page-icon">
-                <i class="fa-solid fa-clipboard-list"></i>
-            </div>
-            <div>
-                <h1>Journal des Suivis</h1>
-                <p class="subtitle">Historique médical consolidé et statuts des consultations.</p>
-            </div>
+<main class="content">
+    <div class="page-header">
+        <div class="page-icon">
+            <i class="fa-solid fa-clipboard-list"></i>
         </div>
+        <div>
+            <h1>Journal des Suivis</h1>
+            <p class="subtitle">Historique médical consolidé et statuts des consultations.</p>
+        </div>
+    </div>
 
-        <div class="timeline">
-            <?php if($suivis): ?>
-                <?php foreach($suivis as $s): 
-                    $dateObj = new DateTime($s['date_suivi']);
-                    $jour = $dateObj->format('d');
-                    $mois = $dateObj->format('M');
-                ?>
-                <div class="suivi-card">
-                    <div class="suivi-date-box">
-                        <span class="day"><?= $jour ?></span>
-                        <span class="month"><?= $mois ?></span>
-                    </div>
+    <div class="timeline">
+        <?php if($suivis): ?>
+            <?php foreach($suivis as $s): 
+                $dateObj = new DateTime($s['date_suivi']);
+                $jour = $dateObj->format('d');
+                $mois = $dateObj->format('M');
+            ?>
+            <div class="suivi-card" data-id="<?= $s['id_suivi'] ?>">
+                <div class="suivi-date-box">
+                    <span class="day"><?= $jour ?></span>
+                    <span class="month"><?= $mois ?></span>
+                </div>
 
-                    <div class="suivi-body">
-                        <div style="display: flex; justify-content: space-between; align-items: start;">
-                            <div class="patient-name">
-                                <?= htmlspecialchars($s['prenom'].' '.$s['nom']) ?>
-                            </div>
+                <div class="suivi-body">
+                    <div style="display: flex; justify-content: space-between; align-items: start;">
+                        <div class="patient-name">
+                            <?= htmlspecialchars($s['prenom'].' '.$s['nom']) ?>
+                        </div>
+                        <div class="status-container">
                             <?php if($s['status'] === 'Terminé'): ?>
                                 <span class="badge-status status-termine">Suivi Terminé</span>
                             <?php else: ?>
                                 <span class="badge-status status-encours">Suivi Actif</span>
                             <?php endif; ?>
                         </div>
+                    </div>
 
-                        <div class="commentaire-text">
-                            <strong><i class="fa-solid fa-quote-left" style="opacity: 0.3; margin-right: 8px;"></i> Observations :</strong><br>
-                            <?= nl2br(htmlspecialchars($s['commentaire'])) ?>
+                    <div class="commentaire-text">
+                        <strong><i class="fa-solid fa-quote-left" style="opacity: 0.3; margin-right: 8px;"></i> Observations :</strong><br>
+                        <?= nl2br(htmlspecialchars($s['commentaire'])) ?>
+                    </div>
+
+                    <div class="actions-group">
+                        <div class="edit-container">
+                            <?php if($s['status'] !== 'Terminé'): ?>
+                                <a href="modifier_suivi.php?id=<?= $s['id_suivi'] ?>" class="btn-action">
+                                    <i class="fa-solid fa-pen"></i> Modifier
+                                </a>
+                            <?php endif; ?>
                         </div>
 
-                        <div class="actions-group">
-                            <a href="modifier_suivi.php?id=<?= $s['id_suivi'] ?>" class="btn-action">
-                                <i class="fa-solid fa-pen"></i> Modifier
-                            </a>
-                            <a href="dossier_patient.php?id=<?= $s['id_patient'] ?>" class="btn-action btn-folder">
-                                <i class="fa-solid fa-eye"></i> Ouvrir le Dossier
-                            </a>
+                        <a href="dossier_patient.php?id=<?= $s['id_patient'] ?>" class="btn-action btn-folder">
+                            <i class="fa-solid fa-eye"></i> Ouvrir le Dossier
+                        </a>
+                        <div class="delete-container">
                             <?php if($s['status'] === 'Terminé'): ?>
                                 <a href="supprimer_suivi.php?id=<?= $s['id_suivi'] ?>" 
                                    class="btn-action btn-del"
                                    onclick="return confirm('Supprimer ce compte-rendu définitivement ?')">
-                                    <i class="fa-solid fa-trash"></i>
+                                     <i class="fa-solid fa-trash"></i>
                                 </a>
                             <?php endif; ?>
                         </div>
                     </div>
                 </div>
-                <?php endforeach; ?>
-            <?php else: ?>
-                <div class="suivi-card" style="justify-content: center; padding: 50px; border-style: dashed; background: transparent;">
-                    <div style="text-align: center;">
-                        <i class="fa-solid fa-notes-medical" style="font-size: 40px; color: var(--border); margin-bottom: 15px;"></i>
-                        <p style="color: var(--text-muted);">Aucun suivi n'a été enregistré dans la base.</p>
-                    </div>
+            </div>
+            <?php endforeach; ?>
+        <?php else: ?>
+            <div class="suivi-card" style="justify-content: center; padding: 50px; border-style: dashed; background: transparent;">
+                <div style="text-align: center;">
+                    <i class="fa-solid fa-notes-medical" style="font-size: 40px; color: var(--border); margin-bottom: 15px;"></i>
+                    <p style="color: var(--text-muted);">Aucun suivi n'a été enregistré dans la base.</p>
                 </div>
-            <?php endif; ?>
+            </div>
+        <?php endif; ?>
+    </div>
+</main>
+
+<div class="timeline-right" style="
+    position: fixed;
+    right: 0;
+    top: 75px;
+    bottom: 0;
+    width: 320px;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    border-left: 1px solid #e2e8f0;
+    padding: 25px;
+    overflow-y: auto;
+    z-index: 800;
+">
+    <div style="margin-bottom: 30px;">
+        <h3 style="color: var(--primary); font-size: 18px; margin-bottom: 5px; display: flex; align-items: center; gap: 10px;">
+            <i class="fa-solid fa-timeline"></i> Chronologie
+        </h3>
+        <p style="color: var(--text-muted); font-size: 13px;">Dernières activités</p>
+    </div>
+    
+    <div style="position: relative; padding-left: 20px;">
+        <div style="position: absolute; left: 9px; top: 0; bottom: 0; width: 2px; background: #e2e8f0;"></div>
+        
+        <?php 
+        $recentSuivis = array_slice($suivis, 0, 8);
+        foreach($recentSuivis as $s): 
+            $dateObj = new DateTime($s['date_suivi']);
+        ?>
+        <div style="position: relative; margin-bottom: 20px;" class="side-item" data-id="<?= $s['id_suivi'] ?>">
+            <div class="side-dot" style="
+                position: absolute;
+                left: -23px;
+                top: 5px;
+                width: 16px;
+                height: 16px;
+                border-radius: 50%;
+                background: <?= $s['status'] === 'Terminé' ? '#10b981' : 'var(--primary)' ?>;
+                border: 3px solid white;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            "></div>
+            
+            <div style="background: white; padding: 15px; border-radius: 10px; border: 1px solid #e2e8f0;">
+                <div style="font-weight: 600; font-size: 14px; color: var(--text-main); margin-bottom: 5px;">
+                    <?= $s['prenom'] . ' ' . $s['nom'] ?>
+                </div>
+                <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">
+                    <?= $dateObj->format('d M, H:i') ?>
+                </div>
+                <div style="font-size: 13px; color: #475569; line-height: 1.4;">
+                    <?= mb_strimwidth($s['commentaire'], 0, 80, "...") ?>
+                </div>
+            </div>
         </div>
-    </main>
+        <?php endforeach; ?>
+    </div>
+    
+    <div style="margin-top: 30px; padding: 15px; background: #f0fdfa; border-radius: 10px; border-left: 4px solid var(--primary);">
+        <div style="font-size: 13px; color: var(--text-main);">
+            <i class="fa-solid fa-lightbulb"></i> <strong>Astuce :</strong> Les statuts se mettent à jour automatiquement.
+        </div>
+    </div>
 </div>
+
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+function updateStatuses() {
+    $.ajax({
+        url: 'suivis.php?action=fetch_status',
+        method: 'GET',
+        dataType: 'json',
+        success: function(data) {
+            data.forEach(function(item) {
+                const card = $(`.suivi-card[data-id="${item.id_suivi}"]`);
+                if (card.length) {
+                    const statusContainer = card.find('.status-container');
+                    const editContainer = card.find('.edit-container');
+                    const deleteContainer = card.find('.delete-container');
+                    
+                    if (item.status === 'Terminé') {
+                        statusContainer.html('<span class="badge-status status-termine">Suivi Terminé</span>');
+                        
+                        // ON VIDE LE CONTENEUR DU BOUTON MODIFIER
+                        editContainer.empty();
+
+                        if (deleteContainer.is(':empty')) {
+                            deleteContainer.html(`
+                                <a href="supprimer_suivi.php?id=${item.id_suivi}" 
+                                   class="btn-action btn-del"
+                                   onclick="return confirm('Supprimer ce compte-rendu définitivement ?')">
+                                     <i class="fa-solid fa-trash"></i>
+                                </a>
+                            `);
+                        }
+                    } else {
+                        statusContainer.html('<span class="badge-status status-encours">Suivi Actif</span>');
+                    }
+                }
+
+                const sideItem = $(`.side-item[data-id="${item.id_suivi}"]`);
+                if (sideItem.length) {
+                    const dot = sideItem.find('.side-dot');
+                    dot.css('background', item.status === 'Terminé' ? '#10b981' : '#0f766e');
+                }
+            });
+        }
+    });
+}
+
+
+</script>
 
 </body>
 </html>

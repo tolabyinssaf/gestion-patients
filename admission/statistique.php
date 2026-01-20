@@ -2,25 +2,14 @@
 include "../config/connexion.php";
 
 try {
-    // 1. LOGIQUE KPI (Table: admissions & Vue: vw_admission_kpi)
+    // Garder exactement votre logique PHP existante
     $kpi = $pdo->query("SELECT * FROM vw_admission_kpi")->fetch(PDO::FETCH_ASSOC);
-    
-    // 2. LOGIQUE TEMPORELLE (Evolution mensuelle des admissions)
     $evo_data = $pdo->query("SELECT DATE_FORMAT(date_admission, '%b') as mois, COUNT(*) as total 
                              FROM admissions GROUP BY MONTH(date_admission) ORDER BY MONTH(date_admission)")->fetchAll(PDO::FETCH_ASSOC);
-
-    // 3. LOGIQUE PAR SERVICE (Vue: v_top_services)
     $services = $pdo->query("SELECT service, total FROM v_top_services ORDER BY total DESC")->fetchAll(PDO::FETCH_ASSOC);
-
-    // 4. LOGIQUE DÉMOGRAPHIQUE (Vue: v_admissions_age)
     $age = $pdo->query("SELECT * FROM v_admissions_age LIMIT 1")->fetch(PDO::FETCH_ASSOC);
-
-    // 5. LOGIQUE DE SÉVÉRITÉ (Vue: v_admissions_type)
     $types = $pdo->query("SELECT type_admission, total FROM v_admissions_type")->fetchAll(PDO::FETCH_KEY_PAIR);
-
-    // 6. LOGIQUE RESSOURCES (Table: chambres)
     $chambres = $pdo->query("SELECT etat, COUNT(*) as nb FROM chambres GROUP BY etat")->fetchAll(PDO::FETCH_KEY_PAIR);
-
 } catch (PDOException $e) { die("Erreur de base de données : " . $e->getMessage()); }
 ?>
 
@@ -28,79 +17,163 @@ try {
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>BioCore v15 | Clinical Intelligence</title>
+    <title>Statistiques | MedCare Pro</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;800&display=swap');
-        body { font-family: 'Plus Jakarta Sans', sans-serif; background: #f8fafc; overflow: hidden; }
-        .sidebar-item.active { background: #0ea5e9; color: white; transform: translateX(8px); }
-        .glass-card { background: white; border: 1px solid #e2e8f0; border-radius: 24px; transition: 0.3s; }
-        .glass-card:hover { border-color: #0ea5e9; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05); }
-        .tab-content { display: none; opacity: 0; transform: scale(0.99); }
-        .tab-content.active { display: block; opacity: 1; transform: scale(1); transition: 0.4s ease-out; }
+        :root {
+            --primary: #0f766e;
+            --sidebar-bg: #0f172a;
+            --bg-body: #f8fafc;
+            --header-bg: #ffffff;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --card-bg: #ffffff;
+            --border: #e2e8f0;
+        }
+
+        /* Mode Sombre - S'active via la classe .dark sur le body */
+        body.dark {
+            --bg-body: #020617;
+            --header-bg: #0f172a;
+            --text-main: #f1f5f9;
+            --text-muted: #94a3b8;
+            --card-bg: #1e293b;
+            --border: #334155;
+        }
+
+        body { font-family: 'Inter', sans-serif; background: var(--bg-body); color: var(--text-main); transition: all 0.3s ease; }
+
+        /* HEADER */
+        header {
+            background: var(--header-bg);
+            padding: 0 40px;
+            height: 75px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+            position: fixed;
+            top: 0; left: 0; right: 0; 
+            z-index: 1000;
+        }
+
+        /* SIDEBAR FONCÉE */
+        .sidebar { 
+            width: 260px; 
+            background: var(--sidebar-bg); 
+            padding: 24px 16px; 
+            position: fixed; 
+            top: 75px; left: 0; bottom: 0; 
+            z-index: 900;
+        }
+        .sidebar a {
+            display: flex; align-items: center; gap: 12px;
+            color: #94a3b8; text-decoration: none;
+            padding: 12px 16px; border-radius: 10px;
+            margin-bottom: 5px; transition: 0.2s;
+        }
+        .sidebar a:hover, .sidebar a.active { background: rgba(255,255,255,0.1); color: #fff; }
+        .sidebar a.active { background: var(--primary); }
+
+        /* MAIN CONTENT */
+        .content { margin-left: 260px; padding: 115px 40px 40px; }
+        .glass-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 20px; }
+
+        /* NAVIGATION TABS */
+        .tab-btn { color: var(--text-muted); padding-bottom: 8px; border-bottom: 2px solid transparent; transition: 0.3s; }
+        .tab-btn.active { color: var(--primary); border-color: var(--primary); font-weight: 700; }
+        
+        .tab-content { display: none; }
+        .tab-content.active { display: block; animation: fadeIn 0.4s ease-out; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
-<body class="flex h-screen">
+<body>
 
-    <aside class="w-20 bg-white border-r border-slate-200 flex flex-col items-center py-8 gap-10">
-        <div class="text-sky-600 text-3xl"><i class="fa-solid fa-microscope"></i></div>
-        <nav class="flex flex-col gap-6">
-            <button onclick="switchTab('global')" id="btn-global" class="sidebar-item active w-12 h-12 rounded-xl flex items-center justify-center text-lg transition-all"><i class="fa-solid fa-chart-pie"></i></button>
-            <button onclick="switchTab('patients')" id="btn-patients" class="sidebar-item w-12 h-12 rounded-xl flex items-center justify-center text-lg text-slate-400 transition-all"><i class="fa-solid fa-user-injured"></i></button>
-            <button onclick="switchTab('logistics')" id="btn-logistics" class="sidebar-item w-12 h-12 rounded-xl flex items-center justify-center text-lg text-slate-400 transition-all"><i class="fa-solid fa-hospital"></i></button>
-        </nav>
+<header>
+    <img src="../images/logo_app2.png" alt="Logo" class="h-10">
+    <div class="flex items-center gap-6">
+        <button onclick="toggleDarkMode()" class="text-slate-500 hover:text-teal-600 transition-colors">
+            <i id="theme-icon" class="fa-solid fa-moon text-xl"></i>
+        </button>
+        <div class="flex items-center gap-3 border-l pl-6 border-slate-200">
+            <span class="text-xs font-bold px-3 py-1 bg-emerald-500/10 text-emerald-500 rounded-full">Live DB</span>
+            <div class="w-8 h-8 rounded-full bg-teal-600 flex items-center justify-center text-white text-xs font-bold">DR</div>
+        </div>
+    </div>
+</header>
+
+<div class="flex">
+    <aside class="sidebar">
+        <h3 style="font-weight: 800;">Unité de Soins</h3>
+        <a href="../connexio_utilisateur/dashboard_medecin.php"><i class="fa-solid fa-chart-line"></i> Vue Générale</a>
+        <a href="../connexio_utilisateur/hospitalisation.php"><i class="fa-solid fa-bed-pulse"></i> Patients Admis</a>
+        <a href="../connexio_utilisateur/patients.php"><i class="fa-solid fa-hospital-user"></i> Patients</a>
+        <a href="list.php"><i class="fa-solid fa-file-prescription"></i> Traitements</a>
+        <a href="../connexio_utilisateur/suivis.php"><i class="fa-solid fa-calendar-check"></i> Consultations</a>
+        <h3 style="font-weight: 800;">Analyse & Gestion</h3>
+        <a href="../admission/statistique.php" class="active"><i class="fa-solid fa-chart-pie"></i> Statistiques</a>
+        <a href="../connexio_utilisateur/archives.php"><i class="fa-solid fa-box-archive"></i> Archives</a>
+        <a href="../connexio_utilisateur/profil_medcin.php"><i class="fa-solid fa-user-gear"></i> Profil</a>
+        <div style="margin-top: 40px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+            <a href="../connexio_utilisateur/deconnexion.php" style="color: #fda4af;"><i class="fa-solid fa-power-off"></i> Déconnexion</a>
+        </div>
     </aside>
 
-    <main class="flex-1 p-10 overflow-y-auto">
-        <header class="flex justify-between items-center mb-10">
+    <main class="content w-full">
+        <div class="flex justify-between items-end mb-10">
             <div>
-                <h1 class="text-3xl font-black text-slate-800" id="title-main">Statistiques Globales</h1>
-                <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Données extraites de `gestion_patients`</p>
+                <h1 class="text-3xl font-black" id="title-main">Analytique Globale</h1>
+                <p class="text-sm text-slate-500 mt-1">Données consolidées de l'unité de soins</p>
             </div>
-            <div class="flex gap-4 items-center">
-                <span class="text-xs font-black px-4 py-2 bg-emerald-50 text-emerald-600 rounded-full border border-emerald-100">Live DB Connected</span>
-                <div class="w-10 h-10 rounded-full bg-slate-200"></div>
+            <div class="flex gap-8">
+                <button onclick="switchTab('global')" id="btn-global" class="tab-btn active">Vue d'ensemble</button>
+                <button onclick="switchTab('patients')" id="btn-patients" class="tab-btn">Démographie</button>
+                <button onclick="switchTab('logistics')" id="btn-logistics" class="tab-btn">Ressources</button>
             </div>
-        </header>
+        </div>
 
         <div id="tab-global" class="tab-content active space-y-8">
             <div class="grid grid-cols-4 gap-6">
-                <div class="glass-card p-6 border-l-4 border-sky-500">
-                    <p class="text-[10px] font-black text-slate-400 uppercase mb-1">Total Admissions</p>
-                    <h2 class="text-3xl font-black text-slate-800"><?= $kpi['total'] ?? 0 ?></h2>
+                <div class="glass-card p-6 border-l-4 border-teal-500">
+                    <p class="text-[10px] font-bold text-slate-500 uppercase mb-1">Total Admissions</p>
+                    <h2 class="text-3xl font-black"><?= $kpi['total'] ?? 0 ?></h2>
                 </div>
                 <div class="glass-card p-6 border-l-4 border-rose-500">
-                    <p class="text-[10px] font-black text-slate-400 uppercase mb-1">Urgences actives</p>
+                    <p class="text-[10px] font-bold text-slate-500 uppercase mb-1">Urgences actives</p>
                     <h2 class="text-3xl font-black text-rose-500"><?= $types['Urgent'] ?? 0 ?></h2>
                 </div>
-                <div class="glass-card p-6 border-l-4 border-emerald-500">
-                    <p class="text-[10px] font-black text-slate-400 uppercase mb-1">Chambres Libres</p>
-                    <h2 class="text-3xl font-black text-emerald-500"><?= $chambres['libre'] ?? 0 ?></h2>
+                <div class="glass-card p-6 border-l-4 border-sky-500">
+                    <p class="text-[10px] font-bold text-slate-500 uppercase mb-1">Lits Libres</p>
+                    <h2 class="text-3xl font-black text-sky-500"><?= $chambres['libre'] ?? 0 ?></h2>
                 </div>
                 <div class="glass-card p-6 bg-slate-900 border-none">
-                    <p class="text-[10px] font-black text-slate-500 uppercase mb-1">Efficacité Clôture</p>
-                    <h2 class="text-3xl font-black text-sky-400"><?= round((($kpi['termine'] ?? 0) / ($kpi['total'] ?: 1)) * 100) ?>%</h2>
+                    <p class="text-[10px] font-bold text-slate-400 uppercase mb-1">Efficacité</p>
+                    <h2 class="text-3xl font-black text-teal-400"><?= round((($kpi['termine'] ?? 0) / ($kpi['total'] ?: 1)) * 100) ?>%</h2>
                 </div>
             </div>
 
             <div class="grid grid-cols-12 gap-8">
                 <div class="col-span-8 glass-card p-8">
-                    <h3 class="font-black text-slate-400 text-xs uppercase mb-8 tracking-widest">Flux Admission (Table: Admissions)</h3>
+                    <h3 class="font-bold text-xs uppercase mb-8 tracking-widest opacity-50">Flux Admission Annuel</h3>
                     <div class="h-80"><canvas id="mainAreaChart"></canvas></div>
                 </div>
                 <div class="col-span-4 glass-card p-8">
-                    <h3 class="font-black text-slate-400 text-xs uppercase mb-8 tracking-widest">Charge par Service (Vue: v_top_services)</h3>
+                    <h3 class="font-bold text-xs uppercase mb-8 tracking-widest opacity-50">Saturation par Service</h3>
                     <div class="space-y-6">
                         <?php foreach($services as $s): ?>
                         <div>
                             <div class="flex justify-between text-xs font-bold mb-2 uppercase">
                                 <span><?= $s['service'] ?></span>
-                                <span><?= $s['total'] ?> Cases</span>
+                                <span class="opacity-50"><?= $s['total'] ?></span>
                             </div>
-                            <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                                <div class="bg-sky-500 h-full" style="width: <?= ($s['total'] / ($services[0]['total'] ?: 1)) * 100 ?>%"></div>
+                            <div class="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                                <div class="bg-teal-500 h-full" style="width: <?= ($s['total'] / ($services[0]['total'] ?: 1)) * 100 ?>%"></div>
                             </div>
                         </div>
                         <?php endforeach; ?>
@@ -111,113 +184,132 @@ try {
 
         <div id="tab-patients" class="tab-content">
             <div class="grid grid-cols-3 gap-8">
-                <div class="glass-card p-10">
-                    <h3 class="text-center font-black text-xs text-slate-400 uppercase mb-10">Sévérité des Admissions (Radar Logic)</h3>
+                <div class="glass-card p-8">
+                    <h3 class="text-center font-bold text-xs uppercase mb-10 opacity-50">Sévérité</h3>
                     <div class="h-64"><canvas id="radarSévérité"></canvas></div>
                 </div>
-                <div class="glass-card p-10">
-                    <h3 class="text-center font-black text-xs text-slate-400 uppercase mb-10">Distribution par Âge (Doughnut)</h3>
+                <div class="glass-card p-8">
+                    <h3 class="text-center font-bold text-xs uppercase mb-10 opacity-50">Tranches d'âge</h3>
                     <div class="h-64"><canvas id="ageDoughnut"></canvas></div>
                 </div>
-                <div class="glass-card p-10">
-                    <h3 class="text-center font-black text-xs text-slate-400 uppercase mb-10">Ratio Homme/Femme (Polar Area)</h3>
+                <div class="glass-card p-8">
+                    <h3 class="text-center font-bold text-xs uppercase mb-10 opacity-50">Genre</h3>
                     <div class="h-64"><canvas id="genrePolar"></canvas></div>
                 </div>
             </div>
         </div>
 
         <div id="tab-logistics" class="tab-content">
-            <div class="max-w-3xl mx-auto glass-card p-12 text-center">
-                <div class="w-20 h-20 bg-sky-50 text-sky-600 rounded-full flex items-center justify-center text-3xl mx-auto mb-6"><i class="fa-solid fa-bed"></i></div>
-                <h3 class="text-3xl font-black mb-4 uppercase tracking-tighter">Capacité des Unités</h3>
-                <p class="text-slate-400 mb-10">Suivi en temps réel de la table <code>chambres</code></p>
+            <div class="max-w-4xl mx-auto glass-card p-12 text-center">
+                <i class="fa-solid fa-bed text-teal-500 text-5xl mb-6"></i>
+                <h3 class="text-2xl font-black mb-2 uppercase">Capacité Hospitalière</h3>
+                <p class="text-slate-500 mb-10">Statut des unités d'hébergement</p>
                 <div class="grid grid-cols-2 gap-8">
-                    <div class="p-8 bg-slate-50 rounded-3xl border border-slate-100">
-                        <span class="text-5xl font-black text-slate-800"><?= $chambres['libre'] ?? 0 ?></span>
-                        <p class="text-xs font-bold text-slate-400 uppercase mt-2">Lits Libres</p>
+                    <div class="p-10 bg-emerald-500/10 rounded-3xl border border-emerald-500/20">
+                        <span class="text-6xl font-black text-emerald-500"><?= $chambres['libre'] ?? 0 ?></span>
+                        <p class="text-xs font-bold uppercase mt-4 opacity-60">Lits Disponibles</p>
                     </div>
-                    <div class="p-8 bg-rose-50 rounded-3xl border border-rose-100">
-                        <span class="text-5xl font-black text-rose-600"><?= $chambres['complet'] ?? 0 ?></span>
-                        <p class="text-xs font-bold text-rose-400 uppercase mt-2">Unités Saturation</p>
+                    <div class="p-10 bg-rose-500/10 rounded-3xl border border-rose-500/20">
+                        <span class="text-6xl font-black text-rose-500"><?= $chambres['complet'] ?? 0 ?></span>
+                        <p class="text-xs font-bold uppercase mt-4 opacity-60">Unités Saturées</p>
                     </div>
                 </div>
             </div>
         </div>
     </main>
+</div>
 
-    <script>
-        // NAVIGATION ENGINE (SPA)
-        function switchTab(id) {
-            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-            document.getElementById('tab-' + id).classList.add('active');
-            document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
-            document.getElementById('btn-' + id).classList.add('active');
-            
-            const titles = { 'global': 'Statistiques Globales', 'patients': 'Analyse Clinique', 'logistics': 'Gestion Logistique' };
-            document.getElementById('title-main').innerText = titles[id];
+<script>
+    // GESTION DU MODE SOMBRE
+    function toggleDarkMode() {
+        const body = document.body;
+        const icon = document.getElementById('theme-icon');
+        body.classList.toggle('dark');
+        
+        if(body.classList.contains('dark')) {
+            icon.classList.replace('fa-moon', 'fa-sun');
+            localStorage.setItem('theme', 'dark');
+        } else {
+            icon.classList.replace('fa-sun', 'fa-moon');
+            localStorage.setItem('theme', 'light');
         }
+    }
 
-        Chart.defaults.font.family = "'Plus Jakarta Sans', sans-serif";
-        Chart.defaults.color = '#94a3b8';
+    // GESTION DES ONGLETS
+    function switchTab(id) {
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        document.getElementById('tab-' + id).classList.add('active');
+        
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById('btn-' + id).classList.add('active');
 
-        // 1. AREA CHART (Evolution)
-        new Chart(document.getElementById('mainAreaChart'), {
-            type: 'line',
-            data: {
-                labels: <?= json_encode(array_column($evo_data, 'mois')) ?>,
-                datasets: [{
-                    data: <?= json_encode(array_column($evo_data, 'total')) ?>,
-                    borderColor: '#0ea5e9',
-                    borderWidth: 4,
-                    fill: true,
-                    backgroundColor: 'rgba(14, 165, 233, 0.05)',
-                    tension: 0.4
-                }]
-            },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
-        });
+        const titles = { 'global': 'Analytique Globale', 'patients': 'Analyse Clinique', 'logistics': 'Gestion Logistique' };
+        document.getElementById('title-main').innerText = titles[id];
+    }
 
-        // 2. RADAR CHART (Sévérité)
-        new Chart(document.getElementById('radarSévérité'), {
-            type: 'radar',
-            data: {
-                labels: ['Urgences', 'Normal', 'Suivi', 'Consultation'],
-                datasets: [{
-                    data: [<?= $types['Urgent'] ?? 0 ?>, <?= $types['Normal'] ?? 0 ?>, 12, 5],
-                    backgroundColor: 'rgba(14, 165, 233, 0.2)',
-                    borderColor: '#0ea5e9',
-                    pointBackgroundColor: '#0ea5e9'
-                }]
-            },
-            options: { scales: { r: { grid: { color: '#f1f5f9' }, ticks: { display: false } } } }
-        });
+    // Charger le thème préféré
+    if(localStorage.getItem('theme') === 'dark') {
+        document.body.classList.add('dark');
+        document.getElementById('theme-icon').classList.replace('fa-moon', 'fa-sun');
+    }
 
-        // 3. DOUGHNUT (Âge)
-        new Chart(document.getElementById('ageDoughnut'), {
-            type: 'doughnut',
-            data: {
-                labels: ['0-14', '15-30', '31-50', '50+'],
-                datasets: [{
-                    data: [<?= $age['0-14']?>, <?= $age['15-30']?>, <?= $age['31-50']?>, <?= $age['+50']?>],
-                    backgroundColor: ['#38bdf8', '#0ea5e9', '#0284c7', '#0369a1'],
-                    borderWidth: 0
-                }]
-            },
-            options: { cutout: '80%', plugins: { legend: { position: 'bottom' } } }
-        });
+    // CONFIGURATION GRAPHIQUES (Gardée identique)
+    Chart.defaults.font.family = "'Inter', sans-serif";
+    Chart.defaults.color = '#94a3b8';
 
-        // 4. POLAR AREA (Genre)
-        new Chart(document.getElementById('genrePolar'), {
-            type: 'polarArea',
-            data: {
-                labels: ['Hommes', 'Femmes'],
-                datasets: [{
-                    data: [15, 25], // Logic: Valeurs statiques exemple si pas de group by patient direct
-                    backgroundColor: ['rgba(14, 165, 233, 0.7)', 'rgba(244, 63, 94, 0.7)']
-                }]
-            },
-            options: { plugins: { legend: { position: 'bottom' } } }
-        });
-    </script>
+    new Chart(document.getElementById('mainAreaChart'), {
+        type: 'line',
+        data: {
+            labels: <?= json_encode(array_column($evo_data, 'mois')) ?>,
+            datasets: [{
+                data: <?= json_encode(array_column($evo_data, 'total')) ?>,
+                borderColor: '#0f766e',
+                backgroundColor: 'rgba(15, 118, 110, 0.1)',
+                fill: true,
+                tension: 0.4,
+                borderWidth: 3
+            }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+    });
+
+    new Chart(document.getElementById('ageDoughnut'), {
+        type: 'doughnut',
+        data: {
+            labels: ['0-14', '15-30', '31-50', '50+'],
+            datasets: [{
+                data: [<?= $age['0-14']?>, <?= $age['15-30']?>, <?= $age['31-50']?>, <?= $age['+50']?>],
+                backgroundColor: ['#2dd4bf', '#0d9488', '#0f766e', '#115e59'],
+                borderWidth: 0
+            }]
+        },
+        options: { cutout: '75%', plugins: { legend: { position: 'bottom' } } }
+    });
+
+    new Chart(document.getElementById('radarSévérité'), {
+        type: 'radar',
+        data: {
+            labels: ['Urgences', 'Normal', 'Suivi', 'Consultation'],
+            datasets: [{
+                data: [<?= $types['Urgent'] ?? 0 ?>, <?= $types['Normal'] ?? 0 ?>, 12, 5],
+                backgroundColor: 'rgba(15, 118, 110, 0.2)',
+                borderColor: '#0f766e'
+            }]
+        },
+        options: { scales: { r: { grid: { color: '#334155' }, ticks: { display: false } } } }
+    });
+
+    new Chart(document.getElementById('genrePolar'), {
+        type: 'polarArea',
+        data: {
+            labels: ['Hommes', 'Femmes'],
+            datasets: [{
+                data: [15, 25],
+                backgroundColor: ['rgba(15, 118, 110, 0.7)', 'rgba(244, 63, 94, 0.7)']
+            }]
+        },
+        options: { plugins: { legend: { position: 'bottom' } } }
+    });
+</script>
 </body>
 </html>

@@ -199,16 +199,20 @@ if (isset($_POST['modifier'])) {
 </header>
 
 <div class="container">
-    <aside class="sidebar">
-        <h3>Menu Médical</h3>
-        <a href="dashboard_medecin.php"><i class="fa-solid fa-chart-pie"></i> Tableau de bord</a>
-        <a href="patients.php" ><i class="fa-solid fa-user-group"></i> Mes Patients</a>
-        <a href="suivis.php"><i class="fa-solid fa-file-medical"></i> Consultations</a>
-        <a href="../traitement/list.php"><i class="fa-solid fa-pills"></i> Traitements</a>
-        <a href="rendezvous.php"><i class="fa-solid fa-calendar-check"></i> Rendez-vous</a>
-        <div style="height: 1px; background: rgba(255,255,255,0.1); margin: 20px 0;"></div>
-        <a href="profil_medcin.php" class="active"><i class="fa-solid fa-user"></i> Profil</a>
-        <a href="deconnexion.php" style="color: #fda4af;"><i class="fa-solid fa-power-off"></i> Déconnexion</a>
+      <aside class="sidebar">
+        <h3 style="font-weight: 800;">Unité de Soins</h3>
+        <a href="dashboard_medecin.php"><i class="fa-solid fa-chart-line"></i> Vue Générale</a>
+        <a href="hospitalisation.php"><i class="fa-solid fa-bed-pulse"></i> Patients Admis</a>
+        <a href="patients.php"><i class="fa-solid fa-hospital-user"></i> Patients</a>
+        <a href="../traitement/list.php"><i class="fa-solid fa-file-prescription"></i> Traitements</a>
+        <a href="suivis.php"><i class="fa-solid fa-calendar-check"></i> Consultations</a>
+        <h3 style="font-weight: 800;">Analyse & Gestion</h3>
+        <a href="../admission/statistique.php"><i class="fa-solid fa-chart-pie"></i> Statistiques</a>
+        <a href="archives.php"><i class="fa-solid fa-box-archive"></i> Archives</a>
+        <a href="profil_medcin.php" class="active"><i class="fa-solid fa-user-gear"></i> Profil</a>
+        <div style="margin-top: 40px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+            <a href="deconnexion.php" style="color: #fda4af;"><i class="fa-solid fa-power-off"></i> Déconnexion</a>
+        </div>
     </aside>
 
     <main class="content">

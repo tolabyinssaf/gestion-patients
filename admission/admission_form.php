@@ -5,6 +5,7 @@ include "../config/connexion.php";
 // 1. Définition des types d'erreurs (Inchangé)
 $errors = [
     "admission_en_cours" => ["icon" => "fa-solid fa-heart-crack", "class" => "alert-error"],
+     "Désolé, cette chambre est déjà complète" => ["icon" => "fa-solid fa-heart-crack", "class" => "alert-error"],
     "champ_vide" => ["icon" => "fa-solid fa-triangle-exclamation", "class" => "alert-warning"],
     "erreur_sql" => ["icon" => "fa-solid fa-file-medical", "class" => "alert-info"],
     "success" => ["icon" => "fa-solid fa-circle-check", "class" => "alert-success"],
@@ -70,7 +71,7 @@ if(isset($_POST['submit'])) {
         $stmt->closeCursor();
 
         $message_type = "success";
-        $message_text = "Admission enregistrée avec succès !";
+        header("Location: admissions_list.php");
         
     } catch(PDOException $e) {
         $errorMsg = $e->getMessage();
@@ -88,7 +89,11 @@ if(isset($_POST['submit'])) {
         } elseif(strpos($errorMsg, 'Le motif est obligatoire') !== false) {
             $message_type = "champ_vide";
             $message_text = "Veuillez saisir le motif de l'admission.";
-        } else {
+           } elseif(strpos($errorMsg, 'Désolé, cette chambre est déjà complète') !== false) {
+            $message_type = "Désolé, cette chambre est déjà complète";
+            $message_text = "Désolé, cette chambre est déjà complète.";
+            } 
+        else {
             $message_type = "erreur_sql";
             $message_text = "Erreur technique : " . $errorMsg;
         }
@@ -284,11 +289,13 @@ if(isset($_POST['submit'])) {
 <div class="wrapper">
     <aside class="sidebar">
         <h3 style="color:rgba(255,255,255,0.3); font-size:11px; text-transform:uppercase; margin-bottom:20px; padding-left:12px;">Menu Gestion</h3>
-        <a href="../connexion_secretaire/dashboard_secretaire.php"><i class="fa-solid fa-chart-line"></i> Tableau de bord</a>
-        <a href="../connexion_secretaire/patients_secr.php"><i class="fa-solid fa-user-group"></i> Patients</a>
-        <a href="admissions_list.php" class="active"><i class="fa-solid fa-door-open"></i> Admissions</a>
-        <a href="../connexion_secretaire/suivis.php"><i class="fa-solid fa-calendar-check"></i> Suivis du jour</a>
-        <a href="caisse.php"><i class="fa-solid fa-wallet"></i> Caisse & Factures</a>
+        <a href="../connexion_secretaire/dashboard_secretaire.php"><i class="fa-solid fa-chart-line"></i> Vue Générale</a>
+        <a href="../connexion_secretaire/patients_secr.php" ><i class="fa-solid fa-user-group"></i> Patients</a>
+         <a href="admissions_list.php" class="active"><i class="fa-solid fa-hospital-user"></i> Admissions</a>
+        <a href="../connexion_secretaire/suivis.php"><i class="fa-solid fa-calendar-check"></i> Suivis</a>
+        <a href="../connexion_secretaire/caisse.php"><i class="fa-solid fa-wallet"></i> Caisse & Factures</a>
+        <a href="archives_admissions.php"><i class="fa-solid fa-box-archive"></i> Archives</a>
+         <a href="../connexion_secretaire/profil_secretaire.php"><i class="fa-solid fa-user"></i> Profil</a>
         <div style="height: 1px; background: rgba(255,255,255,0.1); margin: 20px 0;"></div>
         <a href="../connexio_utilisateur/deconnexion.php" style="color: #fda4af;"><i class="fa-solid fa-power-off"></i> Déconnexion</a>
     </aside>
@@ -312,7 +319,7 @@ if(isset($_POST['submit'])) {
                         <h1 class="h3 fw-800 mb-1" style="color: var(--primary); font-weight: 800;">Nouvelle Admission</h1>
                         <p class="text-muted small mb-0">Enregistrement d'un patient en salle d'attente ou hospitalisation</p>
                     </div>
-                    <a href="admissions.php" class="btn btn-light btn-sm rounded-pill px-3">
+                    <a href="admissions_list.php" class="btn btn-light btn-sm rounded-pill px-3">
                         <i class="fa-solid fa-arrow-left me-1"></i> Liste
                     </a>
                 </div>

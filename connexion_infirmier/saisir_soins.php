@@ -152,12 +152,13 @@ if ($id_admission) {
     </div>
 </header>
 
-    <aside class="sidebar">
+      <aside class="sidebar">
         <h3 style="color:rgba(255,255,255,0.3); font-size:11px; text-transform:uppercase; margin-bottom:20px; padding-left:12px;">Menu Infirmier</h3>
-        <a href="dashboard_infirmier.php" ><i class="fa-solid fa-chart-line"></i> Tableau de bord</a>
-        <a href="liste_patients_inf.php"><i class="fa-solid fa-user-injured"></i> Liste des Patients</a>
-        <a href="saisir_soins.php" class="active"><i class="fa-solid fa-notes-medical"></i> Saisir un Soin</a>
+        <a href="dashboard_infirmier.php"><i class="fa-solid fa-chart-line"></i> Vue Générale</a>
+        <a href="liste_patients_inf.php"><i class="fa-solid fa-user-injured"></i> Patients</a>
+
         <a href="planning.php"><i class="fa-solid fa-calendar-alt"></i> Planning</a>
+         <a href="profil_infirmier.php"><i class="fa-solid fa-user"></i> Profil</a>
         <div style="height: 1px; background: rgba(255,255,255,0.1); margin: 20px 0;"></div>
         <a href="../connexio_utilisateur/deconnexion.php" style="color: #fda4af;"><i class="fa-solid fa-power-off"></i> Déconnexion</a>
     </aside>

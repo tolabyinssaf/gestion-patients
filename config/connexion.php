@@ -1,7 +1,7 @@
 <?php
 
 $host = "localhost";           
-$dbname = "gestion_patients"; 
+$dbname = "gestion_projets"; 
 $user = "root";               
 $pass = "";                    
 

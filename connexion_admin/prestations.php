@@ -132,17 +132,20 @@ $prestations = $stmt->fetchAll(PDO::FETCH_ASSOC);
     </div>
 </header>
 
- <aside class="sidebar">
-        <a href="dashboard_admin.php" ><i class="fa-solid fa-chart-pie"></i> Vue Générale</a>
-        <a href="utilisateurs.php" ><i class="fa-solid fa-user-md"></i> Utilisateurs</a>
-        <a href="prestations.php" class="active" ><i class="fa-solid fa-list-check"></i> Actes & Tarifs</a>
-        <a href="chambres.php"><i class="fa-solid fa-bed"></i> Gestion Chambres</a>
+<aside class="sidebar">
+        <a href="dashboard_admin.php"><i class="fa-solid fa-chart-pie"></i> Vue Générale</a>
+        <a href="utilisateurs.php"><i class="fa-solid fa-user-md"></i> Utilisateurs</a>
+        <a href="prestations.php" class="active"><i class="fa-solid fa-list-check"></i> Actes & Tarifs</a>
+        <a href="../chambres/gestion_chambres.php"><i class="fa-solid fa-bed"></i> Gestion Chambres</a>
         <div style="height: 1px; background: rgba(255,255,255,0.1); margin: 20px 0;"></div>
         <a href="facturation_list.php"><i class="fa-solid fa-file-invoice-dollar"></i> Rapports Financiers</a>
+         <a href="archives.php">
+            <i class="fa-solid fa-box-archive"></i> Archives
+        </a>
         <a href="profil.php" class="<?= basename($_SERVER['PHP_SELF']) == 'profil.php' ? 'active' : '' ?>">
         <i class="fa-solid fa-user-gear"></i> Mon Profil
         </a>
-        <a href="../logout.php" style="color: #fda4af; margin-top: 20px;"><i class="fa-solid fa-power-off"></i> Déconnexion</a>
+        <a href="../connexio_utilisateur/login.php" style="color: #fda4af; margin-top: 20px;"><i class="fa-solid fa-power-off"></i> Déconnexion</a>
     </aside>
 
 <div class="main-wrapper">

@@ -190,14 +190,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 <div class="wrapper">
     <aside class="sidebar">
-        <h3 style="color:rgba(255,255,255,0.2); font-size:10px; text-transform:uppercase; margin-bottom:20px; padding-left:12px; letter-spacing:1px;">Gestion</h3>
-        <a href="dashboard_secretaire.php"><i class="fa-solid fa-house-chimney-medical"></i> Tableau de bord</a>
-        <a href="patients_secr.php" class="active"><i class="fa-solid fa-users"></i> Patients</a>
-        <a href="admissions.php"><i class="fa-solid fa-stethoscope"></i> Salle d'attente</a>
-        <a href="suivis.php"><i class="fa-solid fa-file-medical"></i> Suivis</a>
-        <a href="caisse.php"><i class="fa-solid fa-receipt"></i> Caisse</a>
+        <h3 style="color:rgba(255,255,255,0.3); font-size:11px; text-transform:uppercase; margin-bottom:20px; padding-left:12px;">Menu Gestion</h3>
+        <a href="dashboard_secretaire.php"><i class="fa-solid fa-chart-line"></i> Vue Générale</a>
+        <a href="patients_secr.php" class="active"><i class="fa-solid fa-user-group"></i> Patients</a>
+         <a href="../admission/admissions_list.php"><i class="fa-solid fa-hospital-user"></i> Admissions</a>
+        <a href="suivis.php"><i class="fa-solid fa-calendar-check"></i> Suivis</a>
+        <a href="caisse.php"><i class="fa-solid fa-wallet"></i> Caisse & Factures</a>
+         <a href="profil_secretaire.php"><i class="fa-solid fa-user"></i> Profil</a>
         <div style="height: 1px; background: rgba(255,255,255,0.1); margin: 20px 0;"></div>
-        <a href="../connexio_utilisateur/deconnexion.php" style="color: #fb7185;"><i class="fa-solid fa-power-off"></i> Déconnexion</a>
+        <a href="../connexio_utilisateur/deconnexion.php" style="color: #fda4af;"><i class="fa-solid fa-power-off"></i> Déconnexion</a>
     </aside>
 
     <main class="content">

@@ -1,37 +1,34 @@
 <?php
-// 1. Connexion & Logic Backend
-$host = 'localhost'; $db = 'gestion_patients'; $user = 'root'; $pass = '';
+session_start();
+include "../config/connexion.php";
+
 try {
-    $pdo = new PDO("mysql:host=$host;dbname=$db;charset=utf8", $user, $pass);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-} catch (PDOException $e) { die("Erreur : " . $e->getMessage()); }
+    // 1. Njibu l-archives + DATEDIFF + Tracabilité
 
-// --- API Logic لباش نجبدو البيانات بـ AJAX ---
-if (isset($_GET['get_full_history'])) {
-    header('Content-Type: application/json');
-    $id_adm = $_GET['get_full_history'];
+        $query = "
+        SELECT 
+            arc.id_admission, arc.id_patient, arc.date_admission, arc.archived_at, 
+            arc.service, arc.motif, arc.archive_reason, arc.id_medecin, arc.id_chambre,
+            p.nom, p.prenom, p.telephone, p.sexe, p.date_naissance, p.CIN,
+            u.nom AS medecin_nom,
+            c.numero_chambre,
+            DATEDIFF(arc.archived_at, arc.date_admission) as nb_jours
+        FROM admissions_archive arc
+        JOIN patients p ON arc.id_patient = p.id_patient
+        LEFT JOIN utilisateurs u ON arc.id_medecin = u.id_user
+        LEFT JOIN chambres c ON arc.id_chambre = c.id_chambre
+        GROUP BY arc.id_admission
+        ORDER BY arc.archived_at DESC";
 
-    // نجبدو معلومات المريض والقبول
-    $stmt = $pdo->prepare("SELECT a.*, p.nom, p.prenom, p.CIN, p.sexe, u.nom as medecin 
-                           FROM admissions_archive a 
-                           JOIN patients p ON a.id_patient = p.id_patient 
-                           LEFT JOIN utilisateurs u ON a.id_medecin = u.id_user 
-                           WHERE a.id_admission = ?");
-    $stmt->execute([$id_adm]);
-    $base = $stmt->fetch(PDO::FETCH_ASSOC);
+    $stmt = $pdo->query($query);
+    $archives = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // نجبدو الأدوية (Traitements)
-    $stmt = $pdo->prepare("SELECT * FROM traitements WHERE id_admission = ?");
-    $stmt->execute([$id_adm]);
-    $drugs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    // Stats dyal l-yawm
+    $sorties_today = $pdo->query("SELECT COUNT(*) FROM admissions_archive WHERE DATE(archived_at) = CURDATE()")->fetchColumn();
+    $total_archives = count($archives);
 
-    // نجبدو التتبع (Suivis/Vitals)
-    $stmt = $pdo->prepare("SELECT * FROM suivis WHERE id_patient = ? ORDER BY date_suivi DESC");
-    $stmt->execute([$base['id_patient']]);
-    $vitals = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-    echo json_encode(['info' => $base, 'drugs' => $drugs, 'vitals' => $vitals]);
-    exit;
+} catch (PDOException $e) {
+    die("Erreur SQL : " . $e->getMessage());
 }
 ?>
 
@@ -39,166 +36,250 @@ if (isset($_GET['get_full_history'])) {
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Archives Médicales | Premium System</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <title>Archive ADmission</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-        body { background: #f4f7fa; font-family: 'Plus Jakarta Sans', sans-serif; overflow: hidden; }
-        .glass-sidebar { background: white; height: 100vh; border-right: 1px solid #e2e8f0; width: 400px; position: fixed; display: flex; flex-direction: column; }
-        .main-stage { margin-left: 400px; height: 100vh; overflow-y: auto; padding: 40px; }
-        .archive-item { cursor: pointer; border: 1px solid transparent; transition: 0.3s; border-radius: 12px; margin-bottom: 10px; }
-        .archive-item:hover { background: #f8fbff; border-color: #d1e1ff; }
-        .archive-item.active { background: #eef4ff; border-left: 5px solid #4361ee; }
-        .vitals-card { background: white; border-radius: 16px; border: none; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
-        .timeline-badge { width: 12px; height: 12px; border-radius: 50%; background: #4361ee; position: absolute; left: -6px; top: 10px; }
-        .timeline-box { border-left: 2px dashed #cbd5e1; padding-left: 20px; position: relative; padding-bottom: 20px; }
-        .search-bar { background: #f1f5f9; border: none; border-radius: 10px; padding: 12px 20px; }
+        :root { --primary: #0d9488; --danger: #ef4444; --dark: #0f172a; --bg: #f8fafc; }
+        body { background: var(--bg); font-family: 'Plus Jakarta Sans', sans-serif; color: #1e293b; }
+        
+        .sidebar { width: 260px; height: 100vh; position: fixed; background: var(--dark); padding: 2rem 1rem; color: white; z-index: 100; }
+        .main-content { margin-left: 260px; padding: 2.5rem; }
+        
+        /* Design "Kif kant" - Glassmorphism & Cards */
+        .stat-card { background: white; border-radius: 24px; padding: 1.5rem; border: 1px solid rgba(0,0,0,0.05); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.04); transition: 0.3s; }
+        .stat-card:hover { transform: translateY(-5px); }
+        .icon-box { width: 48px; height: 48px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; }
+
+        .archive-card { background: white; border-radius: 30px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.05); }
+        .table thead th { background: #f8fafc; color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; padding: 1.5rem 1.25rem; }
+        
+        /* Action Buttons Styled */
+        .action-btn { width: 38px; height: 38px; border-radius: 12px; border: 1px solid #e2e8f0; display: inline-flex; align-items: center; justify-content: center; transition: 0.3s; background: white; color: #64748b; }
+        .btn-view:hover { color: var(--primary); border-color: var(--primary); background: #f0fdfa; }
+        .btn-undo:hover { color: #f59e0b; border-color: #f59e0b; background: #fffbeb; }
+        .btn-delete:hover { color: var(--danger); border-color: var(--danger); background: #fef2f2; }
+
+        /* Filter Section */
+        .filter-pane { background: white; border-radius: 20px; padding: 1.5rem; margin-bottom: 2rem; border: 1px solid #e2e8f0; }
+        .form-control, .form-select { border-radius: 12px; padding: 0.6rem 1rem; border: 1px solid #e2e8f0; background: #f8fafc; }
+
+        @media print { .sidebar, .no-print, .filter-pane { display: none !important; } .main-content { margin-left: 0; padding: 0; } }
     </style>
 </head>
 <body>
 
-<div class="glass-sidebar p-4 shadow-sm">
-    <div class="d-flex align-items-center mb-4">
-        <div class="bg-primary text-white p-2 rounded-3 me-3"><i class="bi bi-shield-lock-fill fs-4"></i></div>
-        <h4 class="mb-0 fw-bold">Archive Pro</h4>
+    <aside class="sidebar">
+        <h3 style="color:rgba(255,255,255,0.3); font-size:11px; text-transform:uppercase; margin-bottom:20px; padding-left:12px;">Menu Gestion</h3>
+        <a href="../connexion_secretaire/dashboard_secretaire.php"><i class="fa-solid fa-chart-line"></i> Vue Générale</a>
+        <a href="../connexion_secretaire/patients_secr.php" ><i class="fa-solid fa-user-group"></i> Patients</a>
+         <a href="admissions_list.php" ><i class="fa-solid fa-hospital-user"></i> Admissions</a>
+        <a href="../connexion_secretaire/suivis.php"><i class="fa-solid fa-calendar-check"></i> Suivis</a>
+        <a href="../connexion_secretaire/caisse.php"><i class="fa-solid fa-wallet"></i> Caisse & Factures</a>
+        <a href="archives_admissions.php" class="active"><i class="fa-solid fa-box-archive"></i> Archives</a>
+         <a href="../connexion_secretaire/profil_secretaire.php"><i class="fa-solid fa-user"></i> Profil</a>
+        <div style="height: 1px; background: rgba(255,255,255,0.1); margin: 20px 0;"></div>
+        <a href="../connexio_utilisateur/deconnexion.php" style="color: #fda4af;"><i class="fa-solid fa-power-off"></i> Déconnexion</a>
+    </aside>
+
+<main class="main-content">
+    <div class="d-flex justify-content-between align-items-end mb-4 no-print">
+        
+        <div class="d-flex gap-2">
+       
+            <button onclick="window.print()" class="btn btn-dark rounded-pill px-4 fw-bold"><i class="bi bi-printer me-2"></i>Imprimer</button>
+        </div>
     </div>
 
-    <input type="text" id="searchBox" class="form-control search-bar mb-4" placeholder="Rechercher CIN ou Nom...">
+    <div class="row g-4 mb-4 no-print">
+        <div class="col-md-6">
+            <div class="stat-card d-flex align-items-center gap-3">
+                <div class="icon-box bg-primary bg-opacity-10 text-primary"><i class="bi bi-collection-fill"></i></div>
+                <div><h4 class="fw-800 mb-0"><?= $total_archives ?></h4><p class="text-muted small mb-0">Total des Dossiers Archivés</p></div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="stat-card d-flex align-items-center gap-3">
+                <div class="icon-box bg-info bg-opacity-10 text-info"><i class="bi bi-check2-circle"></i></div>
+                <div><h4 class="fw-800 mb-0"><?= $sorties_today ?></h4><p class="text-muted small mb-0">Sorties (Dernières 24h)</p></div>
+            </div>
+        </div>
+    </div>
 
-    <div class="overflow-auto pe-2" id="listArchives">
-        <?php
-        $stmt = $pdo->query("SELECT a.id_admission, p.nom, p.prenom, a.service, a.date_sortie 
-                             FROM admissions_archive a 
-                             JOIN patients p ON a.id_patient = p.id_patient 
-                             ORDER BY a.archived_at DESC");
-        while($row = $stmt->fetch()): ?>
-        <div class="archive-item p-3 shadow-sm bg-white" onclick="loadFullDossier(<?= $row['id_admission'] ?>, this)">
-            <div class="d-flex justify-content-between align-items-start">
-                <div>
-                    <div class="fw-bold text-dark text-uppercase"><?= $row['nom'] ?> <?= $row['prenom'] ?></div>
-                    <span class="badge bg-light text-primary small mt-1"><?= $row['service'] ?></span>
+    <div class="filter-pane no-print">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label class="small fw-bold text-muted mb-2">Recherche Patient / CIN</label>
+                <div class="input-group">
+                    <span class="input-group-text bg-transparent border-end-0"><i class="bi bi-search"></i></span>
+                    <input type="text" id="searchPatient" class="form-control border-start-0" placeholder="Nom, Prénom ou CIN...">
                 </div>
-                <small class="text-muted"><?= date('d/m/y', strtotime($row['date_sortie'])) ?></small>
+            </div>
+            <div class="col-md-3">
+                <label class="small fw-bold text-muted mb-2">Filtrer par Service</label>
+                <select id="filterService" class="form-select">
+                    <option value="">Tous les services</option>
+                    <?php 
+                        $services = array_unique(array_column($archives, 'service'));
+                        foreach($services as $s) echo "<option value='".htmlspecialchars($s)."'>$s</option>";
+                    ?>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="small fw-bold text-muted mb-2">Date d'archivage</label>
+                <input type="date" id="filterDate" class="form-control">
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <button class="btn btn-light w-100 rounded-3 fw-bold border" onclick="resetFilters()">Effacer</button>
             </div>
         </div>
-        <?php endwhile; ?>
-    </div>
-</div>
-
-<main class="main-stage">
-    <div id="emptyView" class="text-center mt-5 opacity-50">
-        <i class="bi bi-folder2-open display-1"></i>
-        <h3 class="mt-3">Sélectionnez un dossier pour voir l'historique médical</h3>
     </div>
 
-    <div id="dossierView" style="display: none;">
-        <div class="d-flex justify-content-between align-items-end mb-5">
-            <div>
-                <h1 class="fw-bold mb-1" id="pName">--</h1>
-                <p class="text-muted"><i class="bi bi-fingerprint"></i> CIN: <span id="pCIN" class="fw-bold">--</span> | Genre: <span id="pSexe">--</span></p>
-            </div>
-            <button class="btn btn-dark rounded-pill px-4 shadow" onclick="window.print()">
-                <i class="bi bi-printer me-2"></i> Imprimer le Rapport
-            </button>
-        </div>
+    <div class="archive-card">
+        <table class="table align-middle mb-0" id="archiveTable">
+            <thead>
+                <tr>
+                    <th>Ref ID</th>
+                    <th>Patient</th>
+                    <th>Période d'Hosp.</th>
+                    <th>Service & Médecin</th>
+                    <th>Status / Chambre</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach($archives as $row): ?>
+                <tr data-service="<?= htmlspecialchars($row['service']) ?>" data-date="<?= date('Y-m-d', strtotime($row['archived_at'])) ?>">
+                    <td class="fw-bold text-muted ps-4">#<?= $row['id_admission'] ?></td>
+                    <td>
+                        <div class="fw-bold text-dark"><?= htmlspecialchars($row['nom'].' '.$row['prenom']) ?></div>
+                        <small class="text-muted">CIN: <?= $row['CIN'] ?></small>
+                    </td>
+                    <td>
+                        <div class="small fw-500">In: <?= date('d/m/y', strtotime($row['date_admission'])) ?></div>
+                        <div class="small text-primary fw-800">Out: <?= date('d/m/y', strtotime($row['archived_at'])) ?></div>
+                    </td>
+                    <td>
+                        <div class="badge bg-light text-primary border-0 rounded-pill px-3 mb-1 fw-bold"><?= strtoupper($row['service']) ?></div>
+                        <div class="small text-muted">Dr. <?= htmlspecialchars($row['medecin_nom']) ?></div>
+                    </td>
+                    <td>
+                        <span class="small fw-bold text-muted"><i class="bi bi-door-open me-1"></i>Ch. <?= $row['numero_chambre'] ?? '--' ?></span>
+                        <div class="small text-success fw-bold"><?= $row['nb_jours'] ?> jours</div>
+                    </td>
+                    <td class="text-end pe-4">
+                        <div class="d-flex gap-2 justify-content-end no-print">
+                            <button class="action-btn btn-view" title="Voir Dossier" data-bs-toggle="modal" data-bs-target="#view<?= $row['id_admission'] ?>"><i class="bi bi-eye-fill"></i></button>
+                            <button class="action-btn btn-undo" title="Restaurer" onclick="confirmAction('restaurer_admission.php?id=<?= $row['id_admission'] ?>', 'Voulez-vous réactiver ce dossier ?')"><i class="bi bi-arrow-counterclockwise"></i></button>
+                            <button class="action-btn btn-delete" title="Supprimer" onclick="confirmAction('supprimer_archive.php?id=<?= $row['id_admission'] ?>', 'Attention: Suppression définitive !')"><i class="bi bi-trash3-fill"></i></button>
+                        </div>
+                    </td>
+                </tr>
 
-        <div class="row g-4">
-            <div class="col-lg-7">
-                <div class="vitals-card p-4 mb-4">
-                    <h5 class="fw-bold mb-4 text-primary"><i class="bi bi-info-circle me-2"></i>Détails de l'Admission</h5>
-                    <div class="row g-3">
-                        <div class="col-6"><label class="small text-muted">Médecin</label><p class="fw-bold" id="pDoc">--</p></div>
-                        <div class="col-6"><label class="small text-muted">Service</label><p class="fw-bold" id="pService">--</p></div>
-                        <div class="col-6 border-top pt-2"><label class="small text-muted">Date Entrée</label><p id="pIn">--</p></div>
-                        <div class="col-6 border-top pt-2"><label class="small text-muted">Date Sortie</label><p id="pOut">--</p></div>
-                        <div class="col-12 border-top pt-2"><label class="small text-muted">Motif Principal</label><p class="bg-light p-3 rounded" id="pMotif">--</p></div>
+                <div class="modal fade" id="view<?= $row['id_admission'] ?>" tabindex="-1" aria-hidden="true">
+                    <div class="modal-dialog modal-xl modal-dialog-centered">
+                        <div class="modal-content border-0 shadow-lg" style="border-radius: 30px;">
+                            <div class="modal-header border-0 p-4 bg-dark text-white">
+                                <div>
+                                    <h4 class="fw-bold mb-0">Fiche d'Archivage #<?= $row['id_admission'] ?></h4>
+                                    <small class="opacity-50 text-uppercase">Référence Dossier Médical</small>
+                                </div>
+                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body p-4 bg-light bg-opacity-50">
+                                <div class="row g-4">
+                                    <div class="col-md-4">
+                                        <div class="bg-white p-4 rounded-4 shadow-sm border h-100">
+                                            <h6 class="fw-800 text-primary small text-uppercase mb-3">Identité Patient</h6>
+                                            <h5 class="fw-bold"><?= htmlspecialchars($row['nom'].' '.$row['prenom']) ?></h5>
+                                            <p class="text-muted mb-1"><b>CIN:</b> <?= $row['CIN'] ?></p>
+                                            <p class="text-muted"><b>Né le:</b> <?= date('d/m/Y', strtotime($row['date_naissance'])) ?></p>
+                                            <hr>
+                                            <div class="p-3 rounded-3 bg-danger bg-opacity-10">
+                                                <small class="d-block fw-bold text-danger">Raison de l'archive:</small>
+                                                <span class="fw-bold"><?= $row['archive_reason'] ?? 'Sortie Autorisée' ?></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-8">
+                                        <div class="bg-white p-4 rounded-4 shadow-sm border">
+                                            <h6 class="fw-800 text-primary small text-uppercase mb-3">Détails Hospitalisation</h6>
+                                            <div class="row g-3">
+                                                <div class="col-6"><small class="text-muted d-block">Médecin Traitant</small><span class="fw-bold">Dr. <?= $row['medecin_nom'] ?></span></div>
+                                                <div class="col-6"><small class="text-muted d-block">Service</small><span class="fw-bold"><?= $row['service'] ?></span></div>
+                                                <div class="col-6"><small class="text-muted d-block">Date d'Entrée</small><span class="fw-bold"><?= $row['date_admission'] ?></span></div>
+                                                <div class="col-6"><small class="text-muted d-block">Date d'Archivage</small><span class="fw-bold"><?= $row['archived_at'] ?></span></div>
+                                            </div>
+                                            <hr>
+                                            <h6 class="fw-800 text-dark small text-uppercase mb-2">Motif / Rapport Médical :</h6>
+                                            <div class="p-3 rounded-3 bg-light border-start border-primary border-4">
+                                                <p class="small text-muted mb-0 lh-lg"><?= nl2br(htmlspecialchars($row['motif'])) ?></p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="modal-footer border-0 p-4">
+                                <button class="btn btn-outline-dark rounded-pill px-4 fw-bold" onclick="window.print()">Exporter PDF</button>
+                                <button class="btn btn-primary rounded-pill px-4 fw-bold" data-bs-dismiss="modal">Fermer</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
-
-                <div class="vitals-card p-4">
-                    <h5 class="fw-bold mb-4 text-success"><i class="bi bi-capsule me-2"></i>Traitements Administrés</h5>
-                    <div id="pDrugs" class="list-group list-group-flush"></div>
-                </div>
-            </div>
-
-            <div class="col-lg-5">
-                <div class="vitals-card p-4 mb-4 bg-primary text-white shadow-lg">
-                    <h6 class="mb-4">Dernières Constantes</h6>
-                    <div class="d-flex justify-content-around text-center">
-                        <div><div class="small opacity-75">Tension</div><h3 id="vTension">--</h3></div>
-                        <div class="border-start border-white-50 ps-4"><div class="small opacity-75">Temp.</div><h3 id="vTemp">-- °C</h3></div>
-                    </div>
-                </div>
-
-                <div class="vitals-card p-4">
-                    <h5 class="fw-bold mb-4"><i class="bi bi-clock-history me-2"></i>Historique des Suivis</h5>
-                    <div id="vTimeline"></div>
-                </div>
-            </div>
-        </div>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
     </div>
 </main>
 
 <script>
-async function loadFullDossier(id, element) {
-    // Style active
-    document.querySelectorAll('.archive-item').forEach(el => el.classList.remove('active'));
-    element.classList.add('active');
-    
-    document.getElementById('emptyView').style.display = 'none';
-    document.getElementById('dossierView').style.display = 'block';
+// --- Système de Filtrage Dynamique ---
+const searchPatient = document.getElementById('searchPatient');
+const filterService = document.getElementById('filterService');
+const filterDate = document.getElementById('filterDate');
+const tableRows = document.querySelectorAll('#archiveTable tbody tr');
 
-    const res = await fetch(`archives_professional.php?get_full_history=${id}`);
-    const data = await res.json();
+function applyFilters() {
+    const searchVal = searchPatient.value.toLowerCase();
+    const serviceVal = filterService.value;
+    const dateVal = filterDate.value;
 
-    // Mapping Info
-    document.getElementById('pName').innerText = data.info.nom + ' ' + data.info.prenom;
-    document.getElementById('pCIN').innerText = data.info.CIN;
-    document.getElementById('pSexe').innerText = data.info.sexe == 'M' ? 'Masculin' : 'Féminin';
-    document.getElementById('pDoc').innerText = 'Dr. ' + (data.info.medecin || 'Généraliste');
-    document.getElementById('pService').innerText = data.info.service;
-    document.getElementById('pIn').innerText = data.info.date_admission;
-    document.getElementById('pOut').innerText = data.info.date_sortie;
-    document.getElementById('pMotif').innerText = data.info.motif || "Pas de motif spécifié";
+    tableRows.forEach(row => {
+        const text = row.innerText.toLowerCase();
+        const service = row.getAttribute('data-service');
+        const date = row.getAttribute('data-date');
 
-    // Mapping Drugs
-    let dHTML = '';
-    data.drugs.forEach(d => {
-        dHTML += `<div class="list-group-item d-flex justify-content-between align-items-center">
-                    <div><b>${d.medicament}</b><br><small>${d.frequence}</small></div>
-                    <span class="badge bg-success-subtle text-success rounded-pill">${d.dosage}</span>
-                  </div>`;
+        const matchesSearch = text.includes(searchVal);
+        const matchesService = serviceVal === "" || service === serviceVal;
+        const matchesDate = dateVal === "" || date === dateVal;
+
+        row.style.display = (matchesSearch && matchesService && matchesDate) ? "" : "none";
     });
-    document.getElementById('pDrugs').innerHTML = dHTML || '<p class="text-muted">Aucun médicament prescrit.</p>';
-
-    // Mapping Vitals & Timeline
-    if(data.vitals.length > 0) {
-        document.getElementById('vTension').innerText = data.vitals[0].tension;
-        document.getElementById('vTemp').innerText = data.vitals[0].temperature + " °C";
-        
-        let tHTML = '';
-        data.vitals.forEach(v => {
-            tHTML += `<div class="timeline-box">
-                        <div class="timeline-badge"></div>
-                        <div class="small fw-bold">${v.date_suivi}</div>
-                        <div class="text-muted x-small">${v.remarques}</div>
-                      </div>`;
-        });
-        document.getElementById('vTimeline').innerHTML = tHTML;
-    } else {
-        document.getElementById('vTimeline').innerHTML = 'Pas de suivi.';
-    }
 }
 
-// Recherche instantanée
-document.getElementById('searchBox').addEventListener('input', function() {
-    let val = this.value.toLowerCase();
-    document.querySelectorAll('.archive-item').forEach(item => {
-        item.style.display = item.innerText.toLowerCase().includes(val) ? "block" : "none";
-    });
-});
+searchPatient.addEventListener('keyup', applyFilters);
+filterService.addEventListener('change', applyFilters);
+filterDate.addEventListener('change', applyFilters);
+
+function filterToday() {
+    const today = new Date().toISOString().split('T')[0];
+    filterDate.value = today;
+    applyFilters();
+}
+
+function resetFilters() {
+    searchPatient.value = "";
+    filterService.value = "";
+    filterDate.value = "";
+    applyFilters();
+}
+
+function confirmAction(url, msg) {
+    if(confirm(msg)) window.location.href = url;
+}
 </script>
 
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

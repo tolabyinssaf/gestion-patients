@@ -23,7 +23,7 @@ $query = "SELECT a.id_admission, p.nom, p.prenom, p.cin, a.date_admission, a.ser
           LEFT JOIN patients p ON a.id_patient = p.id_patient 
           LEFT JOIN utilisateurs u ON a.id_medecin = u.id_user
           WHERE a.date_sortie IS NULL 
-          OR a.status = 'en cours'
+          OR a.statut = 'en cours'
           ORDER BY a.date_admission DESC";
 
 $stmt = $pdo->prepare($query);
@@ -147,10 +147,10 @@ $attente = $total - $termine;
 <div class="wrapper">
     <aside class="sidebar">
         <h3 style="color:rgba(255,255,255,0.3); font-size:11px; text-transform:uppercase; margin-bottom:20px; padding-left:12px;">Menu Infirmier</h3>
-        <a href="dashboard_infirmier.php"><i class="fa-solid fa-chart-line"></i> Tableau de bord</a>
-        <a href="liste_patients_inf.php" class="active"><i class="fa-solid fa-user-injured"></i> Liste des Soins</a>
-        <a href="saisir_soins.php"><i class="fa-solid fa-notes-medical"></i> Saisir un Soin</a>
+        <a href="dashboard_infirmier.php" ><i class="fa-solid fa-chart-line"></i> Vue Générale</a>
+        <a href="liste_patients_inf.php" class="active"><i class="fa-solid fa-user-injured"></i> Patients</a>
         <a href="planning.php"><i class="fa-solid fa-calendar-alt"></i> Planning</a>
+        <a href="profil_infirmier.php"><i class="fa-solid fa-user"></i> Profil</a>
         <div style="height: 1px; background: rgba(255,255,255,0.1); margin: 20px 0;"></div>
         <a href="../connexio_utilisateur/deconnexion.php" style="color: #fda4af;"><i class="fa-solid fa-power-off"></i> Déconnexion</a>
     </aside>

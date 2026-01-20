@@ -24,13 +24,19 @@ $stmt_hist->execute([$id_patient]);
 $historique_statuts = $stmt_hist->fetchAll(PDO::FETCH_ASSOC);
 
 /* Vérifier si le patient est actuellement hospitalisé */
-$stmt_adm = $pdo->prepare("SELECT id_chambre, service FROM admissions WHERE id_patient = ? AND date_sortie IS NULL LIMIT 1");
+$stmt_adm = $pdo->prepare("
+    SELECT a.id_chambre, a.service, c.numero_chambre 
+    FROM admissions a
+    LEFT JOIN chambres c ON a.id_chambre = c.id_chambre
+    WHERE a.id_patient = ? AND a.date_sortie IS NULL 
+    LIMIT 1
+");
 $stmt_adm->execute([$id_patient]);
 $current_adm = $stmt_adm->fetch();
 
 /* Suivis */
-$stmt = $pdo->prepare("SELECT * FROM suivis WHERE id_patient = ? ORDER BY date_suivi DESC");
-$stmt->execute([$id_patient]);
+$stmt = $pdo->prepare("SELECT id_suivi, date_suivi, commentaire, status FROM suivis WHERE id_patient = ? AND id_medecin = ? ORDER BY date_suivi DESC");
+$stmt->execute([$id_patient, $id_medecin]);
 $suivis = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 /* Traitements */
@@ -237,17 +243,22 @@ $today = date('Y-m-d');
 </header>
 
 <div class="wrapper">
-    <aside class="sidebar">
-        <h3>Menu Médical</h3>
-        <a href="dashboard_medecin.php"><i class="fa-solid fa-chart-pie"></i> Tableau de bord</a>
-        <a href="patients.php" class="active"><i class="fa-solid fa-user-group"></i> Mes Patients</a>
-        <a href="suivis.php"><i class="fa-solid fa-file-medical"></i> Consultations</a>
-        <a href="../traitement/list.php"><i class="fa-solid fa-pills"></i> Traitements</a>
-        <a href="rendezvous.php"><i class="fa-solid fa-calendar-check"></i> Rendez-vous</a>
-        <div style="height: 1px; background: rgba(255,255,255,0.1); margin: 20px 0;"></div>
-        <a href="profil_medcin.php"><i class="fa-solid fa-user"></i> Profil</a>
-        <a href="deconnexion.php" style="color: #fda4af;"><i class="fa-solid fa-power-off"></i> Déconnexion</a>
+       <aside class="sidebar">
+        <h3 style="font-weight: 800;">Unité de Soins</h3>
+        <a href="dashboard_medecin.php" ><i class="fa-solid fa-chart-line"></i> Vue Générale</a>
+        <a href="hospitalisation.php"><i class="fa-solid fa-bed-pulse"></i> Patients Admis</a>
+        <a href="patients.php" class="active"><i class="fa-solid fa-hospital-user"></i> Patients</a>
+        <a href="../traitement/list.php"><i class="fa-solid fa-file-prescription"></i> Traitements</a>
+        <a href="suivis.php"><i class="fa-solid fa-calendar-check"></i> Consultations</a>
+        <h3 style="font-weight: 800;">Analyse & Gestion</h3>
+        <a href="../admission/statistique.php"><i class="fa-solid fa-chart-pie"></i> Statistiques</a>
+        <a href="archives.php"><i class="fa-solid fa-box-archive"></i> Archives</a>
+        <a href="profil_medcin.php"><i class="fa-solid fa-user-gear"></i> Profil</a>
+        <div style="margin-top: 40px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+            <a href="deconnexion.php" style="color: #fda4af;"><i class="fa-solid fa-power-off"></i> Déconnexion</a>
+        </div>
     </aside>
+
 
     <main class="content">
         <div class="patient-card">
@@ -260,13 +271,13 @@ $today = date('Y-m-d');
                 <div class="col">
                     <?php if ($current_adm): ?>
                         <span class="badge mb-2 shadow-sm" style="background: #fffbeb; color: #92400e; border: 1px solid #fde68a;">
-                            <i class="fa-solid fa-bed-pulse me-2"></i> Hospitalisé : Ch. <?= $current_adm['chambre'] ?> (<?= $current_adm['service'] ?>)
+                            <i class="fa-solid fa-bed-pulse me-2"></i> Hospitalisé : Ch. <?= $current_adm['numero_chambre'] ?> (<?= $current_adm['service'] ?>)
                         </span>
                     <?php endif; ?>
                     <h2 class="fw-bold mb-1" style="color: var(--primary);"><?= htmlspecialchars($patient['prenom'].' '.$patient['nom']) ?></h2>
                     <div class="d-flex gap-4">
                         <span class="small text-muted"><i class="fa-solid fa-cake-candles me-2 text-primary"></i><?= htmlspecialchars($patient['date_naissance']) ?></span>
-                        <span class="small text-muted"><i class="fa-solid fa-id-card me-2 text-primary"></i>CIN: <?= htmlspecialchars($patient['CIN'] ?? $patient['cin'] ?? 'N/A') ?></span>
+                        <span class="small text-muted"><i class="fa-solid fa-id-card me-2 text-primary"></i>CIN: <?= htmlspecialchars($patient['CIN'] ?? $patient['CIN'] ?? 'N/A') ?></span>
                     </div>
                 </div>
                 <div class="col-auto">
@@ -371,52 +382,64 @@ $today = date('Y-m-d');
                                     <th class="text-end">ACTION</th>
                                 </tr>
                             </thead>
-                            <tbody>
-    <?php if($suivis): foreach($suivis as $s): 
-        // Comparaison des dates : aujourd'hui vs date du suivi
-        // On transforme les dates en timestamp pour une comparaison fiable
-        $date_suivi_ts = strtotime($s['date_suivi']);
-        $today_ts = strtotime(date('Y-m-d'));
-
-        // Si la date est passée ou aujourd'hui -> Terminé
-        // Sinon -> En cours
-        $est_termine = ($date_suivi_ts <= $today_ts);
-    ?>
-    <tr>
-        <td class="fw-bold text-dark"><?= date('d/m/Y', $date_suivi_ts) ?></td>
-        <td><div class="text-muted small"><?= nl2br(htmlspecialchars($s['commentaire'])) ?></div></td>
-        <td>
-            <?php if ($est_termine): ?>
-                <span class="status-badge bg-termine">
-                    <i class="fa-solid fa-check-circle me-1"></i> Visite faite (Terminé)
-                </span>
-            <?php else: ?>
-                <span class="status-badge bg-encours">
-                    <i class="fa-solid fa-clock me-1"></i> Prévue (En cours)
-                </span>
-            <?php endif; ?>
-        </td>
-        <td class="text-end">
-            <div class="btn-group shadow-sm rounded">
-                <?php if (!$est_termine): ?>
-                    <a href="modifier_suivi.php?id=<?= $s['id_suivi'] ?>" class="btn btn-sm btn-light border-0" title="Modifier">
-                        <i class="fa-solid fa-pen text-dark"></i>
-                    </a>
-                <?php else: ?>
-                    <a href="supprimer_suivi.php?id=<?= $s['id_suivi'] ?>" 
-                       class="btn btn-sm btn-light border-0" 
-                       onclick="return confirm('Attention : Ce suivi est terminé. Voulez-vous vraiment le supprimer de l\'historique ?')"
-                       title="Supprimer l'historique">
-                        <i class="fa-solid fa-trash text-danger"></i>
-                    </a>
-                <?php endif; ?>
-            </div>
-        </td>
-    </tr>
-    <?php endforeach; else: ?>
-        <tr><td colspan="4" class="text-center py-4 text-muted small">Aucun historique de suivi.</td></tr>
-    <?php endif; ?>
-</tbody>
+                              <tbody>
+                                <?php if($suivis): foreach($suivis as $s): 
+                                    // Récupération du statut depuis la base de données
+                                    $statut = !empty($s['statut']) ? trim($s['statut']) : 'En cours';
+                                    $est_termine = (strtolower($statut) === 'terminé' || strtolower($statut) === 'termine');
+                                ?>
+                                <tr>
+                                    <td class="fw-bold text-dark">
+                                        <?= date('d/m/Y', strtotime($s['date_suivi'])) ?>
+                                    </td>
+                                    
+                                    <td>
+                                        <div class="text-muted small">
+                                            <?= nl2br(htmlspecialchars($s['commentaire'])) ?>
+                                        </div>
+                                    </td>
+                                    
+                                    <td>
+                                        <?php if ($est_termine): ?>
+                                            <span class="status-badge bg-termine">
+                                                <i class="fa-solid fa-check-circle me-1"></i> Terminé
+                                            </span>
+                                        <?php else: ?>
+                                            <span class="status-badge bg-encours">
+                                                <i class="fa-solid fa-clock me-1"></i> En cours
+                                            </span>
+                                        <?php endif; ?>
+                                    </td>
+                                    
+                                    <td class="text-end">
+                                        <div class="btn-group shadow-sm rounded">
+                                            <?php if (!$est_termine): ?>
+                                                <!-- Crayon pour modifier si statut "En cours" -->
+                                                <a href="modifier_suivi.php?id=<?= $s['id_suivi'] ?>" 
+                                                   class="btn btn-sm btn-light border-0" 
+                                                   title="Modifier le suivi">
+                                                    <i class="fa-solid fa-pen text-primary"></i>
+                                                </a>
+                                            <?php else: ?>
+                                                <!-- Corbeille pour supprimer si statut "Terminé" -->
+                                                <a href="supprimer_suivi.php?id=<?= $s['id_suivi'] ?>&id_patient=<?= $id_patient ?>" 
+                                                   class="btn btn-sm btn-light border-0" 
+                                                   onclick="return confirm('Voulez-vous vraiment supprimer ce suivi terminé ?')"
+                                                   title="Supprimer le suivi">
+                                                    <i class="fa-solid fa-trash text-danger"></i>
+                                                </a>
+                                            <?php endif; ?>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <?php endforeach; else: ?>
+                                    <tr>
+                                        <td colspan="4" class="text-center py-4 text-muted small">
+                                            Aucun suivi enregistré.
+                                        </td>
+                                    </tr>
+                                <?php endif; ?>
+                            </tbody>
                         </table>
                     </div>
                 </div>
@@ -505,9 +528,10 @@ $today = date('Y-m-d');
                 <div class="content-card">
                     <div class="d-flex justify-content-between align-items-center mb-4">
                         <h5 class="fw-bold mb-0">Ordonnances Actives</h5>
-                        <a href="../traitement/add.php?id_patient=<?= $id_patient ?>" class="btn-add-action">
+                        <a href="../traitement/ajouter_traitement.php?patient_id=<?php echo $patient['id_patient']; ?>" class="btn-add-action">
                             <i class="fa-solid fa-plus-circle"></i> Prescrire
                         </a>
+                      
                     </div>
                     <table class="table align-middle">
                         <thead>

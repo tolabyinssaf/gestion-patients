@@ -10,7 +10,8 @@ $errors = [
     "success" => ["icon" => "fa-solid fa-circle-check", "class" => "alert-success"],
     "erreur_patient" => ["icon" => "fa-solid fa-person-circle-xmark", "class" => "alert-error"],
     "erreur_date" => ["icon" => "fa-solid fa-calendar-xmark", "class" => "alert-warning"],
-    "erreur_service" => ["icon" => "fa-solid fa-hospital-user", "class" => "alert-warning"]
+    "erreur_service" => ["icon" => "fa-solid fa-hospital-user", "class" => "alert-warning"],
+    "medecin_manquant" => ["icon" => "fa-solid fa-user-doctor", "class" => "alert-warning"]
 ];
 
 $message_type = "";
@@ -26,7 +27,6 @@ $user_info = $stmt_user->fetch(PDO::FETCH_ASSOC);
 $patients = $pdo->query("SELECT id_patient, nom, prenom, cin, date_naissance, adresse, telephone FROM patients ORDER BY nom ASC")->fetchAll(PDO::FETCH_ASSOC);
 $medecins = $pdo->query("SELECT id_user, nom, prenom FROM utilisateurs WHERE role = 'medecin' ORDER BY nom ASC")->fetchAll(PDO::FETCH_ASSOC);
 
-// --- NOUVELLE LOGIQUE : DÉTECTION DU PATIENT VIA URL ---
 $patient_preselectionne = null;
 if (isset($_GET['id_patient'])) {
     $id_get = intval($_GET['id_patient']);
@@ -49,46 +49,44 @@ foreach($patients as $p){
 
 if(isset($_POST['submit'])) {
     try {
-        // Sécurité : redirection si nouveau patient
         if($_POST['id_patient'] === 'nouveau') { 
             header("Location: d2.php"); 
             exit; 
         }
 
-        // Préparation des données
-        $id_patient = $_POST['id_patient'];
-        $date_admission = $_POST['date_admission'];
-        $service = $_POST['service'];
-        $motif = $_POST['motif'];
-        $type_admission = $_POST['type_admission'] ?? 'Normal';
-        
-        // Gestion rigoureuse des valeurs optionnelles
-        $chambre = (!empty($_POST['chambre'])) ? $_POST['chambre'] : null;
-        $id_medecin = (!empty($_POST['id_medecin'])) ? $_POST['id_medecin'] : null;
+        // 1. VERIFICATION MEDECIN (EMPECHE LE NULL)
+        if (empty($_POST['id_medecin'])) {
+            $message_type = "medecin_manquant";
+            $message_text = "Erreur : Veuillez sélectionner un médecin dans la liste suggérée.";
+        } else {
+            $id_patient = $_POST['id_patient'];
+            $date_admission = $_POST['date_admission'];
+            $service = $_POST['service'];
+            $motif = $_POST['motif'];
+            $type_admission = $_POST['type_admission'] ?? 'Normal';
+            $chambre = (!empty($_POST['chambre'])) ? $_POST['chambre'] : null;
+            $id_medecin = $_POST['id_medecin']; 
 
-        // Préparation de l'appel à la procédure
-        $stmt = $pdo->prepare("CALL sp_add_admission_safe(?, ?, ?, ?, ?, ?, ?)");
-        
-        // Liaison des paramètres avec gestion du type NULL
-        $stmt->bindValue(1, $id_patient, PDO::PARAM_INT);
-        $stmt->bindValue(2, $date_admission);
-        $stmt->bindValue(3, $service);
-        $stmt->bindValue(4, $motif);
-        $stmt->bindValue(5, $type_admission);
-        $stmt->bindValue(6, $chambre, $chambre === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
-        $stmt->bindValue(7, $id_medecin, $id_medecin === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
+            // Préparation de l'appel
+            $stmt = $pdo->prepare("CALL sp_add_admission_safe(?, ?, ?, ?, ?, ?, ?)");
+            
+            $stmt->bindValue(1, $id_patient, PDO::PARAM_INT);
+            $stmt->bindValue(2, $date_admission);
+            $stmt->bindValue(3, $service);
+            $stmt->bindValue(4, $motif);
+            $stmt->bindValue(5, $type_admission);
+            $stmt->bindValue(6, $chambre, $chambre === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
+            $stmt->bindValue(7, $id_medecin, PDO::PARAM_INT); // Ici on force l'INT car on a vérifié qu'il n'est pas vide
 
-        $stmt->execute();
-        
-        // Important pour libérer la connexion après une procédure stockée
-        $stmt->closeCursor();
+            $stmt->execute();
+            $stmt->closeCursor();
 
-        $message_type = "success";
-        $message_text = "Admission enregistrée avec succès !";
+            $message_type = "success";
+            header("Location: admissions_list.php");
+        }
 
     } catch(PDOException $e) {
         $errorMsg = $e->getMessage();
-        // Détection des erreurs renvoyées par le SIGNAL SQL de votre procédure
         if(strpos($errorMsg, 'Admission déjà en cours') !== false) $message_type = "admission_en_cours";
         elseif(strpos($errorMsg, 'Patient introuvable') !== false) $message_type = "erreur_patient";
         elseif(strpos($errorMsg, "Date d'admission invalide") !== false) $message_type = "erreur_date";
@@ -262,26 +260,20 @@ if(isset($_POST['submit'])) {
             color: white;
         }
 
-        /* Style global pour toutes les alertes en jaune */
-.alert-medical.alert-warning { 
-    background: #fef9c3; /* Jaune clair */
-    color: #854d0e;      /* Texte marron foncé pour le contraste */
-    border: 1px solid #fde047;
-    border-radius: 12px;
-    padding: 15px;
-    font-weight: 500;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-}
+        .alert-medical.alert-warning { 
+            background: #fef9c3; 
+            color: #854d0e;  
+            border: 1px solid #fde047;
+            border-radius: 12px;
+            padding: 15px;
+            font-weight: 500;
+        }
 
-/* On force l'icône à avoir une couleur orange plus vive */
-.alert-medical.alert-warning i {
-    color: #ca8a04;
-}
-.alert-success { 
-    background: #f0fdf4 !important; 
-    border: 1px solid #bbf7d0 !important;
-    color: #166534 !important;
-}
+        .alert-success { 
+            background: #f0fdf4 !important; 
+            border: 1px solid #bbf7d0 !important;
+            color: #166534 !important;
+        }
         
         .theme-switch { cursor: pointer; padding: 8px 16px; border-radius: 50px; background: #f1f5f9; border: 1px solid var(--border); font-size: 13px; font-weight: 600; }
     </style>
@@ -300,13 +292,15 @@ if(isset($_POST['submit'])) {
 </header>
 
 <div class="wrapper">
-      <aside class="sidebar">
+    <aside class="sidebar">
         <h3 style="color:rgba(255,255,255,0.3); font-size:11px; text-transform:uppercase; margin-bottom:20px; padding-left:12px;">Menu Gestion</h3>
-        <a href="../connexion_secretaire/dashboard_secretaire.php"><i class="fa-solid fa-chart-line"></i> Tableau de bord</a>
-        <a href="../connexion_secretaire/patients_secr.php"><i class="fa-solid fa-user-group"></i> Patients</a>
-        <a href="admissions_list.php" class="active"><i class="fa-solid fa-door-open"></i> Admissions</a>
-        <a href="../connexion_secretaire/suivis.php"><i class="fa-solid fa-calendar-check"></i> Suivis du jour</a>
-        <a href="caisse.php"><i class="fa-solid fa-wallet"></i> Caisse & Factures</a>
+        <a href="../connexion_secretaire/dashboard_secretaire.php"><i class="fa-solid fa-chart-line"></i> Vue Générale</a>
+        <a href="../connexion_secretaire/patients_secr.php" ><i class="fa-solid fa-user-group"></i> Patients</a>
+         <a href="admissions_list.php" class="active"><i class="fa-solid fa-hospital-user"></i> Admissions</a>
+        <a href="../connexion_secretaire/suivis.php"><i class="fa-solid fa-calendar-check"></i> Suivis</a>
+        <a href="../connexion_secretaire/caisse.php"><i class="fa-solid fa-wallet"></i> Caisse & Factures</a>
+        <a href="archives_admissions.php"><i class="fa-solid fa-box-archive"></i> Archives</a>
+         <a href="../connexion_secretaire/profil_secretaire.php"><i class="fa-solid fa-user"></i> Profil</a>
         <div style="height: 1px; background: rgba(255,255,255,0.1); margin: 20px 0;"></div>
         <a href="../connexio_utilisateur/deconnexion.php" style="color: #fda4af;"><i class="fa-solid fa-power-off"></i> Déconnexion</a>
     </aside>
@@ -460,8 +454,8 @@ if(isset($_POST['submit'])) {
 
                         <div class="col-md-6">
                             <div class="position-relative">
-                                <label class="form-label">Médecin Responsable</label>
-                                <input type="text" id="medecinSearch" class="form-control" placeholder="Nom du médecin...">
+                                <label class="form-label">Médecin Responsable <span class="text-danger">*</span></label>
+                                <input type="text" id="medecinSearch" class="form-control" placeholder="Nom du médecin..." required autocomplete="off">
                                 <input type="hidden" name="id_medecin" id="id_medecin">
                                 <div class="patient-list" id="medecinList">
                                     <?php foreach($medecins as $m): ?>
@@ -507,6 +501,7 @@ if(isset($_POST['submit'])) {
 const patientsData = <?php echo json_encode($patients); ?>;
 const lastAdmissions = <?php echo json_encode($lastAdmissions); ?>;
 
+// --- Recherche Patient ---
 const searchInput = $("#patientSearch");
 const patientList = $("#patientList");
 
@@ -521,9 +516,11 @@ searchInput.on("focus click keyup", function(){
     });
 });
 
-$(document).on("click", "#patientList .patient-item", function(){
+$(document).on("click", "#patientList .patient-item", function(e){
+    e.stopPropagation();
     const id = $(this).data("id");
     if(id === "nouveau"){ window.location.href = "d2.php"; return; }
+
     const patient = patientsData.find(p => p.id_patient == id);
     const lastAdm = lastAdmissions[id];
 
@@ -548,37 +545,37 @@ $(document).on("click", "#patientList .patient-item", function(){
     $("#patientInfo").slideDown();
 });
 
+// --- Recherche Médecin ---
 const medSearch = $("#medecinSearch");
 const medList = $("#medecinList");
+
 medSearch.on("focus click keyup", function(){
     medList.show();
     let value = $(this).val().toLowerCase();
-    $("#medecinList .patient-item").each(function(){
-        const nom = $(this).data("nom") || "";
-        const prenom = $(this).data("prenom") || "";
-        $(this).toggle(nom.includes(value) || prenom.includes(value));
+    $("#medecinList .medecin-item").each(function(){
+        const text = $(this).text().toLowerCase();
+        $(this).toggle(text.includes(value));
     });
 });
-$(document).on("click", ".medecin-item", function(e) {
-    e.preventDefault();
-    
-    // 1. Récupération de l'ID via data-id
-    const idMed = $(this).attr("data-id"); 
+
+$(document).on("mousedown", ".medecin-item", function(e){
+    e.preventDefault(); 
+    const idMed = $(this).attr("data-id");
     const nomMed = $(this).text().trim();
 
-    console.log("Tentative de sélection Médecin - ID trouvé:", idMed);
-
-    if (idMed) {
-        // 2. Injection dans le champ caché
-        $("#id_medecin").val(idMed); 
-        // 3. Affichage du nom dans le champ de recherche
+    if(idMed){
+        $("#id_medecin").val(idMed);
         $("#medecinSearch").val(nomMed);
-        // 4. Fermeture de la liste
         $("#medecinList").hide();
-        
-        console.log("Valeur finale du champ caché id_medecin:", $("#id_medecin").val());
-    } else {
-        console.error("Erreur : L'ID du médecin est vide dans l'attribut data-id");
+    }
+});
+
+// --- Sécurité Anti-Null à l'envoi ---
+$("#admissionForm").on("submit", function(e) {
+    if (!$("#id_medecin").val()) {
+        e.preventDefault();
+        alert("Attention : Vous devez sélectionner un médecin dans la liste suggérée !");
+        $("#medecinSearch").focus();
     }
 });
 
@@ -616,6 +613,5 @@ toggleBtn.addEventListener("click", () => {
     toggleBtn.innerText = isDark ? "☀️ Mode Clair" : "🌙 Mode Sombre";
 });
 </script>
-
 </body>
 </html>

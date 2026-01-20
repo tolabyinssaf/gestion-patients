@@ -28,11 +28,14 @@ $sql_planning = "
         pl.priorite,
         p.id_patient,
         a.id_admission,
-        p.nom as pat_nom, p.prenom as pat_prenom, a.chambre,
+        p.nom as pat_nom, 
+        p.prenom as pat_prenom, 
+        c.numero_chambre as chambre, -- On récupère le numéro depuis la table chambres
         'prevu' as source
     FROM planning_soins pl
     JOIN patients p ON pl.id_patient = p.id_patient
     JOIN admissions a ON pl.id_admission = a.id_admission
+    LEFT JOIN chambres c ON a.id_chambre = c.id_chambre -- Jointure pour avoir le numéro de chambre
     WHERE pl.date_prevue = ? AND pl.statut != 'fait'
 
     UNION ALL
@@ -46,11 +49,14 @@ $sql_planning = "
         'normale' as priorite,
         p.id_patient,
         a.id_admission,
-        p.nom as pat_nom, p.prenom as pat_prenom, a.chambre,
+        p.nom as pat_nom, 
+        p.prenom as pat_prenom, 
+        c.numero_chambre as chambre, -- On récupère le numéro depuis la table chambres
         'realise' as source
     FROM soins_patients s
     JOIN admissions a ON s.id_admission = a.id_admission
     JOIN patients p ON a.id_patient = p.id_patient
+    LEFT JOIN chambres c ON a.id_chambre = c.id_chambre -- Jointure pour avoir le numéro de chambre
     WHERE DATE(s.date_soin) = ?
 
     ORDER BY heure ASC";
@@ -147,15 +153,15 @@ for ($i = -3; $i <= 3; $i++) {
     </div>
 </header>
 
-<aside class="sidebar">
-    <h3 style="color:rgba(255,255,255,0.3); font-size:11px; text-transform:uppercase; margin-bottom:20px; padding-left:12px;">Menu Infirmier</h3>
-    <a href="dashboard_infirmier.php" ><i class="fa-solid fa-chart-line"></i> Tableau de bord</a>
-    <a href="liste_patients_inf.php"><i class="fa-solid fa-user-injured"></i> Liste des Patients</a>
-    <a href="saisir_soins.php"><i class="fa-solid fa-notes-medical"></i> Saisir un Soin</a>
-    <a href="planning.php" class="active"><i class="fa-solid fa-calendar-alt"></i> Planning</a>
-    <div style="height: 1px; background: rgba(255,255,255,0.1); margin: 20px 0;"></div>
-    <a href="../connexio_utilisateur/deconnexion.php" style="color: #fda4af;"><i class="fa-solid fa-power-off"></i> Déconnexion</a>
-</aside>
+    <aside class="sidebar">
+        <h3 style="color:rgba(255,255,255,0.3); font-size:11px; text-transform:uppercase; margin-bottom:20px; padding-left:12px;">Menu Infirmier</h3>
+        <a href="dashboard_infirmier.php" ><i class="fa-solid fa-chart-line"></i> Vue Générale</a>
+        <a href="liste_patients_inf.php"><i class="fa-solid fa-user-injured"></i> Patients</a>
+        <a href="planning.php" class="active"><i class="fa-solid fa-calendar-alt"></i> Planning</a>
+        <a href="profil_infirmier.php"><i class="fa-solid fa-user"></i> Profil</a>
+        <div style="height: 1px; background: rgba(255,255,255,0.1); margin: 20px 0;"></div>
+        <a href="../connexio_utilisateur/deconnexion.php" style="color: #fda4af;"><i class="fa-solid fa-power-off"></i> Déconnexion</a>
+    </aside>
 
 <main class="content">
     <div class="d-flex justify-content-between align-items-end mb-4">

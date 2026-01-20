@@ -12,7 +12,7 @@ $patient_id = $_GET['id_patient'] ?? $_GET['id'] ?? null;
 
 if (!$patient_id) die("Patient non spécifié.");
 
-// Infos médecin pour le header (cohérence avec dossier_patient.php)
+// Infos médecin pour le header
 $stmt_med = $pdo->prepare("SELECT prenom, nom FROM utilisateurs WHERE id_user = ?");
 $stmt_med->execute([$user_id]);
 $medecin = $stmt_med->fetch(PDO::FETCH_ASSOC);
@@ -30,14 +30,27 @@ if (isset($_POST['ajouter_suivi'])) {
     $status = $_POST['status'];
 
     try {
-        $stmt = $pdo->prepare("CALL ajouter_suivi(?, ?, ?, ?)");
-        $stmt->execute([$patient_id, $date_suivi, $commentaire, $status]);
+        // On appelle la procédure avec les 5 paramètres nécessaires
+        $stmt = $pdo->prepare("CALL ajouter_suivi(?, ?, ?, ?, ?)");
+        $stmt->execute([$patient_id, $user_id, $date_suivi, $commentaire, $status]);
+        
         header("Location: dossier_patient.php?id=" . $patient_id);
         exit;
     } catch (PDOException $e) {
-        $message = (strpos($e->getMessage(), "La date") !== false) 
-            ? "La date du suivi ne peut pas être antérieure à aujourd'hui." 
-            : "Erreur lors de l'ajout du suivi.";
+        // On vérifie si c'est notre erreur personnalisée (Code 1644 ou SQLSTATE 45000)
+        if ($e->getCode() == '45000' || strpos($e->getMessage(), '1644') !== false) {
+            // errorInfo[2] contient uniquement le texte du MESSAGE_TEXT de votre procédure SQL
+            $errorInfo = $e->errorInfo;
+            $message = isset($errorInfo[2]) ? $errorInfo[2] : "La date du suivi ne peut pas être antérieure à aujourd'hui.";
+            
+            // Si le message contient encore des préfixes techniques, on nettoie
+            if (strpos($message, 'Unhandled user-defined exception') !== false) {
+                $message = "La date du suivi ne peut pas être antérieure à aujourd'hui.";
+            }
+        } else {
+            // Pour les autres types d'erreurs (problème de base de données, etc.)
+            $message = "Une erreur est survenue lors de l'enregistrement.";
+        }
     }
 }
 ?>
@@ -68,7 +81,7 @@ if (isset($_POST['ajouter_suivi'])) {
         * { margin:0; padding:0; box-sizing:border-box; font-family: 'Inter', sans-serif; }
         body { background: var(--bg-body); color: var(--text-main); }
 
-        /* ===== HEADER (Identique au dossier) ===== */
+        /* ===== HEADER ===== */
         header {
             background: var(--white);
             padding: 0 40px;
@@ -92,7 +105,7 @@ if (isset($_POST['ajouter_suivi'])) {
         /* ===== LAYOUT ===== */
         .wrapper { display: flex; min-height: calc(100vh - 75px); }
 
-        /* ===== SIDEBAR (Identique au dossier) ===== */
+        /* ===== SIDEBAR ===== */
         .sidebar { width: 260px; background: var(--sidebar-bg); padding: 24px 16px; flex-shrink: 0; }
         .sidebar h3 {
             color: rgba(255,255,255,0.3); font-size: 11px; 
@@ -184,15 +197,19 @@ if (isset($_POST['ajouter_suivi'])) {
 
 <div class="wrapper">
     <aside class="sidebar">
-        <h3>Menu Médical</h3>
-        <a href="dashboard_medecin.php"><i class="fa-solid fa-chart-pie"></i> Tableau de bord</a>
-        <a href="patients.php" class="active"><i class="fa-solid fa-user-group"></i> Mes Patients</a>
-        <a href="suivis.php"><i class="fa-solid fa-file-medical"></i> Consultations</a>
-        <a href="../traitement/list.php"><i class="fa-solid fa-pills"></i> Traitements</a>
-        <a href="rendezvous.php"><i class="fa-solid fa-calendar-check"></i> Rendez-vous</a>
-        <div style="height: 1px; background: rgba(255,255,255,0.1); margin: 20px 0;"></div>
-        <a href="profil_medcin.php"><i class="fa-solid fa-user"></i> Profil</a>
-        <a href="deconnexion.php" style="color: #fda4af;"><i class="fa-solid fa-power-off"></i> Déconnexion</a>
+        <h3 style="font-weight: 800;">Unité de Soins</h3>
+        <a href="dashboard_medecin.php" ><i class="fa-solid fa-chart-line"></i> Vue Générale</a>
+        <a href="hospitalisation.php"><i class="fa-solid fa-bed-pulse"></i> Patients Admis</a>
+        <a href="patients.php"><i class="fa-solid fa-hospital-user"></i> Patients</a>
+        <a href="../traitement/list.php"><i class="fa-solid fa-file-prescription"></i> Traitements</a>
+        <a href="suivis.php" class="active"><i class="fa-solid fa-calendar-check"></i> Consultations</a>
+        <h3 style="font-weight: 800;">Analyse & Gestion</h3>
+        <a href="../admission/statistique.php"><i class="fa-solid fa-chart-pie"></i> Statistiques</a>
+        <a href="archives.php"><i class="fa-solid fa-box-archive"></i> Archives</a>
+        <a href="profil_medcin.php"><i class="fa-solid fa-user-gear"></i> Profil</a>
+        <div style="margin-top: 40px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+            <a href="deconnexion.php" style="color: #fda4af;"><i class="fa-solid fa-power-off"></i> Déconnexion</a>
+        </div>
     </aside>
 
     <main class="content">
@@ -202,7 +219,6 @@ if (isset($_POST['ajouter_suivi'])) {
 
         <div class="form-container mx-auto">
             <div class="form-header">
-               
                 <div class="patient-info-mini">
                     <div class="avatar-mini"><i class="fa-solid fa-user"></i></div>
                     <div>
@@ -215,7 +231,7 @@ if (isset($_POST['ajouter_suivi'])) {
             <div class="form-body">
                 <?php if($message): ?>
                     <div class="alert-custom">
-                        <i class="fa-solid fa-circle-exclamation me-2"></i> <?= $message ?>
+                        <i class="fa-solid fa-circle-exclamation me-2"></i> <?= htmlspecialchars($message) ?>
                     </div>
                 <?php endif; ?>
 
@@ -229,7 +245,7 @@ if (isset($_POST['ajouter_suivi'])) {
                             <label class="label-custom">Statut du suivi</label>
                             <select name="status" class="form-select" required>
                                 <option value="En cours">En cours</option>
-                                <option value="Terminé">Terminé</option>
+                                <option value="termine">Terminé</option>
                             </select>
                         </div>
                         <div class="col-12">

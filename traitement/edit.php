@@ -1,8 +1,13 @@
 <?php
-// --- VOTRE CODE PHP ORIGINAL (NON MODIFIÉ) ---
 require_once '../config/connexion.php';
 
-$id = $_GET['id'];
+// Vérifier l'ID
+if(!isset($_GET['id']) || !is_numeric($_GET['id'])) {
+    header("Location: list.php?error=ID+invalide");
+    exit();
+}
+
+$id = intval($_GET['id']);
 
 // Récupérer le traitement avec la vue
 $stmt = $pdo->prepare("SELECT * FROM v_traitements_complets WHERE id_traitement = ?");
@@ -10,28 +15,28 @@ $stmt->execute([$id]);
 $traitement = $stmt->fetch();
 
 if(!$traitement) {
-    die("<div class='alert alert-error'><i class='fas fa-exclamation-circle'></i> Traitement non trouvé !</div>");
+    header("Location: list.php?error=Traitement+non+trouvé");
+    exit();
 }
+
+$success = false;
+$error = '';
+$message = '';
 
 if(isset($_POST['submit'])) {
     try {
-        $pdo->beginTransaction();
-        
         $id_patient = $_POST['id_patient'];
         $description = $_POST['description'];
         $date_traitement = $_POST['date_traitement'];
         $medicament = $_POST['medicament'];
         $suivi = $_POST['suivi'];
         
-        // Appel de la procédure stockée pour la modification
-        $stmt = $pdo->prepare("CALL sp_modifier_traitement(?, ?, ?, ?, ?, ?, @success, @message)");
+        $stmt = $pdo->prepare("CALL sp_modifier_traitement(?, ?, ?, ?, ?, ?)");
         $stmt->execute([$id, $id_patient, $description, $date_traitement, $medicament, $suivi]);
         
-        // Récupérer les résultats
-        $result = $pdo->query("SELECT @success as success, @message as message")->fetch();
+        $result = $stmt->fetch();
         
-        if($result['success']) {
-            $pdo->commit();
+        if($result && isset($result['success']) && $result['success'] == 1) {
             $success = true;
             $message = $result['message'];
             
@@ -40,15 +45,11 @@ if(isset($_POST['submit'])) {
             $stmt->execute([$id]);
             $traitement = $stmt->fetch();
         } else {
-            $pdo->rollBack();
-            $success = false;
-            $error = $result['message'];
+            $error = $result['message'] ?? 'Erreur inconnue lors de la modification';
         }
         
     } catch(PDOException $e) {
-        $pdo->rollBack();
-        $success = false;
-        $error = "Erreur: " . $e->getMessage();
+        $error = "Erreur SQL: " . $e->getMessage();
     }
 }
 ?>
@@ -58,179 +59,215 @@ if(isset($_POST['submit'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Modifier Traitement | MediApp</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <title>Modifier Traitement | MedCare</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
     <style>
         :root {
-            --sidebar-width: 260px;
-            --primary: #01A28C;
-            --primary-dark: #008976;
-            --bg-body: #f4f7f6;
-            --text-main: #2c3e50;
-            --text-light: #7f8c8d;
+            --primary: #0f766e;
+            --primary-light: #f0fdfa;
+            --sidebar-bg: #0f172a;
+            --bg-body: #f1f5f9;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
             --white: #ffffff;
-            --shadow: 0 2px 10px rgba(0,0,0,0.05);
-            --radius: 10px;
+            --border: #cbd5e1;
+            --error: #dc2626;
+            --success: #16a34a;
         }
 
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Inter', sans-serif; background: var(--bg-body); color: var(--text-main); display: flex; min-height: 100vh; }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Plus Jakarta Sans', sans-serif; }
+        body { background: var(--bg-body); color: var(--text-main); }
 
-        /* Sidebar Navigation */
-        .sidebar { width: var(--sidebar-width); background: #1a252f; color: white; position: fixed; height: 100vh; padding: 20px 0; z-index: 100; }
-        .logo { padding: 0 25px 30px; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 20px; font-size: 22px; font-weight: 700; color: var(--primary); display: flex; align-items: center; gap: 10px; }
-        .nav-links { list-style: none; }
-        .nav-links li a { display: flex; align-items: center; gap: 12px; padding: 12px 25px; color: #bdc3c7; text-decoration: none; transition: 0.3s; font-weight: 500; }
-        .nav-links li a:hover, .nav-links li.active a { background: rgba(255,255,255,0.05); color: var(--primary); border-left: 4px solid var(--primary); }
+        /* Header */
+        header {
+            background: var(--white);
+            padding: 0 40px; height: 75px;
+            display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 1px solid var(--border);
+            position: fixed; top: 0; width: 100%; z-index: 1000;
+        }
+        .logo { height: 45px; }
+        .user-pill {
+            background: var(--primary-light); padding: 8px 18px; border-radius: 12px;
+            display: flex; align-items: center; gap: 10px;
+            font-size: 14px; font-weight: 600; color: var(--primary);
+            border: 1px solid rgba(15, 118, 110, 0.2);
+        }
+
+        /* Layout */
+        .container { display: flex; padding-top: 75px; }
+        
+        .sidebar { 
+            width: 260px; background: var(--sidebar-bg); 
+            padding: 24px 16px; position: fixed; 
+            height: calc(100vh - 75px); overflow-y: auto;
+        }
+        .sidebar h3 { color: rgba(255,255,255,0.3); font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 20px; padding-left: 12px; }
+        .sidebar a { display: flex; align-items: center; gap: 12px; color: #94a3b8; text-decoration: none; padding: 12px 16px; border-radius: 10px; margin-bottom: 5px; transition: 0.2s; }
+        .sidebar a:hover { background: rgba(255,255,255,0.05); color: #fff; }
+        .sidebar a.active { background: var(--primary); color: #fff; }
 
         /* Main Content */
-        .main-content { margin-left: var(--sidebar-width); flex: 1; padding: 0 0 40px 0; width: calc(100% - var(--sidebar-width)); }
+        .main-content { flex: 1; padding: 40px; margin-left: 260px; }
+        .breadcrumb { font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 8px; text-align: center; text-transform: uppercase; }
+        h1 { font-size: 30px; font-weight: 800; color: var(--sidebar-bg); margin-bottom: 30px; text-align: center; }
 
-        /* Top Header */
-        .top-header { background: var(--white); height: 70px; display: flex; align-items: center; justify-content: space-between; padding: 0 40px; box-shadow: var(--shadow); margin-bottom: 30px; position: sticky; top: 0; z-index: 99; }
-        .user-profile { display: flex; align-items: center; gap: 10px; }
-        .user-avatar { width: 35px; height: 35px; background: var(--primary); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; }
+        /* Banner Info */
+        .patient-banner {
+            max-width: 900px; margin: 0 auto 25px;
+            background: var(--white); padding: 20px 30px;
+            border-radius: 15px; border: 1px solid var(--border);
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 20px;
+        }
+        .info-box { display: flex; flex-direction: column; }
+        .info-box label { font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 700; margin-bottom: 4px; }
+        .info-box span { font-weight: 700; color: var(--primary); font-size: 15px; }
 
-        /* Form & Cards */
-        .container { max-width: 1000px; margin: 0 auto; padding: 0 20px; }
-        .page-header { margin-bottom: 25px; }
-        .card { background: var(--white); border-radius: var(--radius); box-shadow: var(--shadow); padding: 25px; margin-bottom: 25px; border: 1px solid #eef2f3; }
-        .section-title { font-size: 16px; font-weight: 600; color: var(--primary); margin-bottom: 20px; display: flex; align-items: center; gap: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
-        
-        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        /* Card Style */
+        .card { 
+            background: #f8fafc; border-radius: 20px; 
+            border: 2px solid var(--primary); 
+            box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.1);
+            overflow: hidden; max-width: 900px; margin: 0 auto 30px;
+        }
+        .card-header { 
+            background: var(--primary); padding: 20px 40px; 
+            display: flex; align-items: center; gap: 15px; 
+        }
+        .card-header h2 { font-size: 20px; color: #fff; font-weight: 700; }
+        .card-header i { color: #fff; font-size: 24px; } 
+
+        form { padding: 40px; }
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 25px; }
         .full-width { grid-column: span 2; }
 
-        label { display: block; margin-bottom: 8px; font-weight: 600; font-size: 14px; }
-        input, select, textarea { width: 100%; padding: 12px; border: 1px solid #dcdde1; border-radius: 6px; font-size: 14px; transition: 0.3s; }
-        input:focus, textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(1, 162, 140, 0.1); }
-        
-        .info-strip { background: #e8f6f3; padding: 15px 20px; border-radius: 8px; display: flex; justify-content: space-between; margin-bottom: 25px; border-left: 4px solid var(--primary); }
-        .info-box span { display: block; font-size: 12px; color: var(--text-light); }
-        .info-box strong { font-size: 14px; color: var(--text-main); }
+        .field-group { display: flex; flex-direction: column; gap: 8px; }
+        .field-group label { font-size: 14px; font-weight: 800; color: var(--sidebar-bg); }
+        .required::after { content: ' *'; color: var(--error); }
+
+        .form-control { 
+            width: 100%; padding: 14px 16px; 
+            border: 2px solid #cbd5e1; border-radius: 12px; 
+            font-size: 15px; font-weight: 600; background: var(--white);
+        }
+        .form-control:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.1); }
 
         /* Buttons */
-        .btn-group { display: flex; gap: 15px; margin-top: 10px; }
-        .btn { padding: 12px 25px; border-radius: 6px; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 8px; border: none; transition: 0.3s; }
-        .btn-save { background: #f39c12; color: white; }
-        .btn-save:hover { background: #e67e22; transform: translateY(-2px); }
-        .btn-cancel { background: #95a5a6; color: white; text-decoration: none; }
-
-        /* Alerts */
-        .alert { padding: 15px; border-radius: 8px; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; font-weight: 500; }
-        .alert-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-        .alert-error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-
-        @media (max-width: 768px) {
-            .sidebar { width: 70px; }
-            .sidebar .logo span, .nav-links span { display: none; }
-            .main-content { margin-left: 70px; width: calc(100% - 70px); }
-            .form-grid { grid-template-columns: 1fr; }
-            .full-width { grid-column: span 1; }
+        .btn-group { display: flex; gap: 15px; margin-top: 30px; }
+        .btn { 
+            flex: 1; padding: 16px; border: none; border-radius: 12px; 
+            font-weight: 700; font-size: 15px; cursor: pointer; 
+            display: flex; align-items: center; justify-content: center; gap: 10px; transition: 0.3s;
+            text-decoration: none;
         }
+        .btn-save { background: var(--sidebar-bg); color: white; }
+        .btn-save:hover { background: var(--primary); transform: translateY(-2px); }
+        .btn-delete { background: #fee2e2; color: var(--error); }
+        .btn-delete:hover { background: var(--error); color: white; }
+
+        /* History Table */
+        .history-section { max-width: 900px; margin: 0 auto; }
+        .history-title { font-size: 18px; font-weight: 800; color: var(--sidebar-bg); margin-bottom: 15px; display: flex; align-items: center; gap: 10px; }
+        .table-container { background: white; border-radius: 15px; border: 1px solid var(--border); overflow: hidden; }
+        .hist-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .hist-table th { background: #f8fafc; padding: 12px 15px; text-align: left; color: var(--text-muted); font-weight: 700; border-bottom: 1px solid var(--border); }
+        .hist-table td { padding: 12px 15px; border-bottom: 1px solid var(--border); font-weight: 500; }
+        .badge-field { background: #e2e8f0; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; }
+
+        .alert { padding: 15px 40px; border-bottom: 1px solid var(--border); font-weight: 600; display: flex; align-items: center; gap: 10px; }
+        .alert-error { background: #fee2e2; color: var(--error); }
+        .alert-success { background: #dcfce7; color: var(--success); }
     </style>
 </head>
 <body>
 
+<header>
+    <img src="../images/logo_app2.png" alt="MedCare" class="logo">
+    <div class="user-pill">
+        <i class="fas fa-user-md"></i>
+        <span>Espace Médical</span>
+    </div>
+</header>
+
+<div class="container">
     <aside class="sidebar">
-        <div class="logo">
-            <i class="fas fa-heartbeat"></i> <span>MediApp</span>
-        </div>
-        <ul class="nav-links">
-            <li><a href="dashboard.php"><i class="fas fa-chart-line"></i> <span>Tableau de bord</span></a></li>
-            <li><a href="patients.php"><i class="fas fa-user-injured"></i> <span>Patients</span></a></li>
-            <li class="active"><a href="list.php"><i class="fas fa-file-medical"></i> <span>Traitements</span></a></li>
-            <li><a href="planning.php"><i class="fas fa-calendar-alt"></i> <span>Rendez-vous</span></a></li>
-            <li><a href="settings.php"><i class="fas fa-cog"></i> <span>Paramètres</span></a></li>
-        </ul>
+        <h3 style="font-weight: 800;">Unité de Soins</h3>
+        <a href="../connexio_utilisateur/dashboard_medecin.php"><i class="fa-solid fa-chart-line"></i> Vue Générale</a>
+        <a href="../connexio_utilisateur/hospitalisation.php"><i class="fa-solid fa-bed-pulse"></i> Patients Admis</a>
+        <a href="../connexio_utilisateur/patients.php"><i class="fa-solid fa-hospital-user"></i> Patients</a>
+        <a href="list.php" class="active"><i class="fa-solid fa-file-prescription"></i> Traitements</a>
+        <a href="../connexio_utilisateur/suivis.php"><i class="fa-solid fa-calendar-check"></i> Consultations</a>
+        <h3 style="font-weight: 800;">Analyse & Gestion</h3>
+        <a href="../admission/statistique.php"><i class="fa-solid fa-chart-pie"></i> Statistiques</a>
+        <a href="../connexio_utilisateur/archives.php"><i class="fa-solid fa-box-archive"></i> Archives</a>
+        <a href="../connexio_utilisateur/profil_medcin.php"><i class="fa-solid fa-user-gear"></i> Profil</a>
     </aside>
 
     <main class="main-content">
-        <header class="top-header">
-            <div class="search-bar">
-                <span style="color: var(--text-light)">Saisie de dossier médical</span>
-            </div>
-            <div class="user-profile">
-                <div class="user-info" style="text-align: right">
-                    <div style="font-weight: 600; font-size: 14px;">Dr. Jean Dupont</div>
-                    <div style="font-size: 12px; color: var(--text-light)">Médecin Généraliste</div>
-                </div>
-                <div class="user-avatar">JD</div>
-            </div>
-        </header>
+        <div class="breadcrumb">Dossier #<?= str_pad($traitement['id_traitement'], 5, '0', STR_PAD_LEFT) ?> / Modification</div>
+        <h1>Mise à jour du traitement</h1>
 
-        <div class="container">
-            <div class="page-header">
-                <h2 style="font-size: 24px; margin-bottom: 5px;">Modifier le Traitement</h2>
-                <p style="color: var(--text-light); font-size: 14px;">Mise à jour du dossier #<?= str_pad($traitement['id_traitement'], 4, '0', STR_PAD_LEFT) ?></p>
+        <div class="patient-banner">
+            <div class="info-box"><label>Patient</label><span><?= htmlspecialchars($traitement['nom'] . ' ' . $traitement['prenom']) ?></span></div>
+            <div class="info-box"><label>Âge / CIN</label><span><?= $traitement['age'] ?? '--' ?> ans / <?= $traitement['cin'] ?></span></div>
+            <div class="info-box"><label>Création</label><span><?= date('d/m/Y', strtotime($traitement['date_creation'])) ?></span></div>
+            <div class="info-box"><label>Dernière MAJ</label><span><?= date('d/m/Y H:i', strtotime($traitement['date_modification'])) ?></span></div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <i class="fas fa-edit"></i>
+                <h2>Édition de la prescription</h2>
             </div>
 
-            <?php if(isset($success)): ?>
-                <div class="alert <?= $success ? 'alert-success' : 'alert-error' ?>">
-                    <i class="fas <?= $success ? 'fa-check-circle' : 'fa-exclamation-circle' ?>"></i>
-                    <?= $success ? $message : $error ?>
+            <?php if($success || $error): ?>
+                <div class="alert alert-<?= $success ? 'success' : 'error' ?>">
+                    <i class="fas <?= $success ? 'fa-check-circle' : 'fa-circle-exclamation' ?>"></i>
+                    <?= htmlspecialchars($success ? $message : $error) ?>
                 </div>
             <?php endif; ?>
 
-            <div class="info-strip">
-                <div class="info-box">
-                    <span>Patient</span>
-                    <strong><?= htmlspecialchars($traitement['nom'] . ' ' . $traitement['prenom']) ?></strong>
-                </div>
-                <div class="info-box">
-                    <span>Âge</span>
-                    <strong><?= $traitement['age'] ?> ans</strong>
-                </div>
-                <div class="info-box">
-                    <span>Créé le</span>
-                    <strong><?= date('d/m/Y', strtotime($traitement['date_creation'])) ?></strong>
-                </div>
-                <div class="info-box">
-                    <span>Historique</span>
-                    <strong><?= $traitement['total_traitements'] ?> traitement(s)</strong>
-                </div>
-            </div>
-
             <form method="POST" id="editTraitementForm">
-                <div class="card">
-                    <h3 class="section-title"><i class="fas fa-info-circle"></i> Informations Générales</h3>
-                    <div class="form-grid">
-                        <div class="form-group full-width">
-                            <label class="required">Sélectionner le Patient</label>
-                            <select name="id_patient" required>
-                                <?php
-                                $stmt_p = $pdo->query("SELECT * FROM patients ORDER BY nom, prenom");
-                                while($patient = $stmt_p->fetch()):
-                                    $selected = ($patient['id_patient'] == $traitement['id_patient']) ? "selected" : "";
-                                ?>
-                                <option value="<?= $patient['id_patient'] ?>" <?= $selected ?>>
-                                    <?= htmlspecialchars($patient['nom'] . ' ' . $patient['prenom']) ?> (<?= $patient['date_naissance'] ?>)
-                                </option>
-                                <?php endwhile; ?>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label class="required">Date du traitement</label>
-                            <input type="date" name="date_traitement" value="<?= $traitement['date_traitement'] ?>" required max="<?= date('Y-m-d') ?>">
-                        </div>
-                        <div class="form-group">
-                            <label>Médicament prescrit</label>
-                            <input type="text" name="medicament" value="<?= htmlspecialchars($traitement['medicament']) ?>" placeholder="Ex: Paracétamol 500mg">
+                <div class="form-grid">
+                    <div class="field-group full-width">
+                        <label for="id_patient" class="required">Patient</label>
+                        <select name="id_patient" id="id_patient" class="form-control" required>
+                            <?php
+                            $stmt_p = $pdo->query("SELECT * FROM patients ORDER BY nom, prenom");
+                            while($p = $stmt_p->fetch()):
+                                $sel = ($p['id_patient'] == $traitement['id_patient']) ? "selected" : "";
+                            ?>
+                            <option value="<?= $p['id_patient'] ?>" <?= $sel ?>>
+                                <?= htmlspecialchars($p['nom'] . ' ' . $p['prenom']) ?> (CIN: <?= $p['CIN'] ?>)
+                            </option>
+                            <?php endwhile; ?>
+                        </select>
+                    </div>
+
+                    <div class="field-group">
+                        <label for="date_traitement" class="required">Date du traitement</label>
+                        <input type="date" name="date_traitement" class="form-control" value="<?= $traitement['date_traitement'] ?>" required max="<?= date('Y-m-d') ?>">
+                    </div>
+
+                    <div class="field-group">
+                        <label for="medicament">Médicament(s)</label>
+                        <input type="text" name="medicament" class="form-control" value="<?= htmlspecialchars($traitement['medicament'] ?? '') ?>">
+                    </div>
+
+                    <div class="field-group full-width">
+                        <label for="description" class="required">Diagnostic et Traitement</label>
+                        <textarea name="description" id="description" class="form-control" rows="5" required><?= htmlspecialchars($traitement['description']) ?></textarea>
+                        <div style="text-align: right; font-size: 11px; color: var(--text-muted); font-weight: 700; margin-top: 5px;">
+                            <span id="charCount"><?= strlen($traitement['description']) ?></span> / 2000 caractères
                         </div>
                     </div>
-                </div>
 
-                <div class="card">
-                    <h3 class="section-title"><i class="fas fa-notes-medical"></i> Diagnostic & Suivi</h3>
-                    <div class="form-grid">
-                        <div class="form-group full-width">
-                            <label class="required">Description détaillée</label>
-                            <textarea name="description" id="description" rows="5" required><?= htmlspecialchars($traitement['description']) ?></textarea>
-                        </div>
-                        <div class="form-group full-width">
-                            <label>Notes de suivi / Recommandations</label>
-                            <textarea name="suivi" rows="4"><?= htmlspecialchars($traitement['suivi']) ?></textarea>
-                        </div>
+                    <div class="field-group full-width">
+                        <label for="suivi">Instructions et Suivi</label>
+                        <textarea name="suivi" class="form-control" rows="3"><?= htmlspecialchars($traitement['suivi'] ?? '') ?></textarea>
                     </div>
                 </div>
 
@@ -238,21 +275,66 @@ if(isset($_POST['submit'])) {
                     <button type="submit" name="submit" class="btn btn-save">
                         <i class="fas fa-save"></i> Enregistrer les modifications
                     </button>
-                    <a href="list.php" class="btn btn-cancel">
-                        <i class="fas fa-times"></i> Annuler
+                    <a href="delete.php?id=<?= $id ?>" class="btn btn-delete" onclick="return confirm('Supprimer définitivement ce traitement ?')">
+                        <i class="fas fa-trash"></i> Supprimer
+                    </a>
+                </div>
+                
+                <div style="text-align: center; margin-top: 25px;">
+                    <a href="list.php" style="color: var(--text-muted); text-decoration: none; font-weight: 700; font-size: 13px;">
+                        <i class="fas fa-chevron-left"></i> Retourner à la liste sans modifier
                     </a>
                 </div>
             </form>
         </div>
-    </main>
 
-    <script>
-        // On conserve vos scripts de validation
-        document.getElementById('editTraitementForm').addEventListener('submit', function(e) {
-            if (!confirm('Confirmez-vous la modification de ce dossier médical ?')) {
-                e.preventDefault();
-            }
-        });
-    </script>
+        <div class="history-section">
+            <div class="history-title"><i class="fas fa-history"></i> Historique des modifications</div>
+            <div class="table-container">
+                <table class="hist-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Champ</th>
+                            <th>Ancienne valeur</th>
+                            <th>Nouvelle valeur</th>
+                            <th>Auteur</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php
+                        $stmt_h = $pdo->prepare("SELECT * FROM historique_traitements WHERE id_traitement = ? ORDER BY date_modification DESC LIMIT 5");
+                        $stmt_h->execute([$id]);
+                        $hists = $stmt_h->fetchAll();
+                        if($hists): foreach($hists as $h): ?>
+                        <tr>
+                            <td style="white-space:nowrap;"><?= date('d/m/Y H:i', strtotime($h['date_modification'])) ?></td>
+                            <td><span class="badge-field"><?= htmlspecialchars($h['champ_modifie']) ?></span></td>
+                            <td style="color:var(--text-muted);"><?= htmlspecialchars(mb_strimwidth($h['ancienne_valeur'], 0, 40, '...')) ?></td>
+                            <td style="color:var(--primary);"><?= htmlspecialchars(mb_strimwidth($h['nouvelle_valeur'], 0, 40, '...')) ?></td>
+                            <td><?= htmlspecialchars($h['utilisateur'] ?? 'Système') ?></td>
+                        </tr>
+                        <?php endforeach; else: ?>
+                        <tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding:20px;">Aucun historique disponible</td></tr>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+</div>
+
+<script>
+document.getElementById('description').addEventListener('input', function() {
+    document.getElementById('charCount').textContent = this.value.length;
+});
+
+document.getElementById('editTraitementForm').addEventListener('submit', function(e) {
+    if (!confirm("Voulez-vous vraiment appliquer ces modifications ?")) {
+        e.preventDefault();
+    }
+});
+</script>
+
 </body>
 </html>

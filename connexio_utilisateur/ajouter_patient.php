@@ -8,44 +8,44 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'medecin') {
 }
 
 $user_id = $_SESSION['user_id'];
+
+// Infos médecin
 $stmt = $pdo->prepare("SELECT nom, prenom, email FROM utilisateurs WHERE id_user = ?");
 $stmt->execute([$user_id]);
 $medecin = $stmt->fetch(PDO::FETCH_ASSOC);
 
 $form_message = "";
 
+// =========================
+// AJOUT PATIENT (PROCÉDURE)
+// =========================
 if (isset($_POST['ajouter'])) {
-    $cin = strtoupper($_POST['cin']); 
-    $nom = $_POST['nom'];
-    $prenom = $_POST['prenom'];
+    $cin = strtoupper(trim($_POST['cin']));
+    $nom = trim($_POST['nom']);
+    $prenom = trim($_POST['prenom']);
     $date_naissance = $_POST['date_naissance'];
     $sexe = $_POST['sexe'] ?? 'H';
-    $adresse = $_POST['adresse'];
-    $telephone = $_POST['telephone'];
-    $email = $_POST['email'];
-    // NOUVEAUX CHAMPS
+    $adresse = trim($_POST['adresse']);
+    $telephone = trim($_POST['telephone']);
+    $email = trim($_POST['email']);
     $groupe_sanguin = $_POST['groupe_sanguin'];
     $statut = $_POST['statut'] ?? 'Stable';
     $allergies = $_POST['allergies'];
-    
     $date_inscription = date('Y-m-d');
 
     try {
-        // Mise à jour de l'appel SQL (Assurez-vous que votre procédure "ajouter_patient" accepte ces 3 nouveaux paramètres)
-        // Sinon, utilisez une requête INSERT directe ci-dessous :
-        $sql = "INSERT INTO patients (cin, nom, prenom, date_naissance, sexe, adresse, telephone, email, groupe_sanguin, statut, allergies, date_inscription, id_medecin) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-        $stmt = $pdo->prepare($sql);
+        $stmt = $pdo->prepare("CALL ajouter_patient_secure(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, @msg)");
         $stmt->execute([$cin, $nom, $prenom, $date_naissance, $sexe, $adresse, $telephone, $email, $groupe_sanguin, $statut, $allergies, $date_inscription, $user_id]);
-        
-        header("Location: patients.php?success=1");
-        exit;
-    } catch (PDOException $e) {
-        if ($e->errorInfo[1] == 1062) {
-            $form_message = "CIN ou Email déjà utilisé par un autre patient.";
+        $result = $pdo->query("SELECT @msg AS message")->fetch(PDO::FETCH_ASSOC);
+
+        if ($result && $result['message'] === 'OK') {
+            header("Location: patients.php?success=1");
+            exit;
         } else {
-            $form_message = "Erreur lors de l'enregistrement : " . $e->getMessage();
+            $form_message = $result['message'] ?? "Erreur inconnue";
         }
+    } catch (PDOException $e) {
+        $form_message = "Erreur serveur : " . $e->getMessage();
     }
 }
 ?>
@@ -57,134 +57,146 @@ if (isset($_POST['ajouter'])) {
     <title>Ajouter Patient | MedCare</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         :root {
             --primary: #0f766e;
             --primary-light: #f0fdfa;
             --primary-hover: #115e59;
             --sidebar-bg: #0f172a;
-            --bg-body: #f8fafc;
-            --text-main: #1e293b;
+            --bg-body: #f1f5f9;
+            --text-main: #0f172a;
             --text-muted: #64748b;
             --white: #ffffff;
-            --border: #e2e8f0;
+            --border: #cbd5e1;
+            --input-bg: #ffffff;
             --error: #dc2626;
         }
 
-        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', "Segoe UI", sans-serif; }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Plus Jakarta Sans', sans-serif; }
         body { background: var(--bg-body); color: var(--text-main); }
 
+        /* HEADER FIXE */
         header {
             background: var(--white);
-            padding: 0 40px;
-            height: 75px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+            padding: 0 40px; height: 75px;
+            display: flex; justify-content: space-between; align-items: center;
             border-bottom: 1px solid var(--border);
-            position: sticky; top: 0; z-index: 100;
+            position: fixed; top: 0; width: 100%; z-index: 1000;
         }
         .logo { height: 45px; }
         .user-pill {
-            background: var(--primary-light);
-            padding: 8px 18px;
-            border-radius: 12px;
+            background: var(--primary-light); padding: 8px 18px; border-radius: 12px;
             display: flex; align-items: center; gap: 10px;
             font-size: 14px; font-weight: 600; color: var(--primary);
-            border: 1px solid rgba(15, 118, 110, 0.1);
+            border: 1px solid rgba(15, 118, 110, 0.2);
         }
 
-        .container { display: flex; min-height: calc(100vh - 75px); }
-
-        .sidebar { width: 260px; background: var(--sidebar-bg); padding: 24px 16px; flex-shrink: 0; }
-        .sidebar h3 {
-            color: rgba(255,255,255,0.3); font-size: 11px; 
-            text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 20px; padding-left: 12px;
+        /* CONTAINER AVEC SIDEBAR FIXE */
+        .container { display: flex; padding-top: 75px; }
+        
+        .sidebar { 
+            width: 260px; 
+            background: var(--sidebar-bg); 
+            padding: 24px 16px; 
+            flex-shrink: 0; 
+            position: fixed; 
+            height: calc(100vh - 75px);
+            overflow-y: auto;
         }
-        .sidebar a {
-            display: flex; align-items: center; gap: 12px;
-            color: #94a3b8; text-decoration: none;
-            padding: 12px 16px; border-radius: 10px;
-            margin-bottom: 5px; transition: 0.2s;
-        }
+        .sidebar h3 { color: rgba(255,255,255,0.3); font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 20px; padding-left: 12px; }
+        .sidebar a { display: flex; align-items: center; gap: 12px; color: #94a3b8; text-decoration: none; padding: 12px 16px; border-radius: 10px; margin-bottom: 5px; transition: 0.2s; }
         .sidebar a:hover { background: rgba(255,255,255,0.05); color: #fff; }
         .sidebar a.active { background: var(--primary); color: #fff; }
 
-        .content { flex: 1; padding: 40px; max-width: 1000px; margin: 0 auto; }
-        .breadcrumb { font-size: 14px; color: var(--text-muted); margin-bottom: 8px; }
-        .content h1 { font-size: 28px; color: #1e293b; margin-bottom: 30px; }
+        /* CONTENT AJUSTÉ ET CENTRÉ */
+        .content { flex: 1; padding: 40px; margin-left: 260px; }
+        .breadcrumb { font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .content h1 { font-size: 30px; font-weight: 800; color: var(--sidebar-bg); margin-bottom: 30px; text-align: center; }
 
+        /* CARD CENTRÉE ET COULEUR VERT DANS HEADER */
         .card { 
-            background: var(--white); 
-            padding: 35px; 
-            border-radius: 12px; 
-            border: 1px solid var(--border);
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            background: #f8fafc; 
+            padding: 0; 
+            border-radius: 20px; 
+            border: 2px solid var(--primary); /* Bordure en accord avec le vert */
+            box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.1);
+            overflow: hidden;
+            max-width: 850px; /* Limite la largeur pour un meilleur aspect visuel */
+            margin: 0 auto;  /* CENTRE LA CARTE HORIZONTALEMENT */
         }
-        .card-header { margin-bottom: 25px; border-bottom: 1px solid #f1f5f9; padding-bottom: 15px; }
-        .card-header h2 { font-size: 18px; color: var(--primary); }
+        .card-header { 
+            background: var(--primary); /* CHANGÉ EN VERT */
+            padding: 20px 40px; 
+            margin-bottom: 0;
+            display: flex; 
+            align-items: center; 
+            gap: 15px; 
+        }
+        .card-header h2 { font-size: 20px; color: #fff; font-weight: 700; }
+        .card-header i { color: #fff !important; } /* Icône en blanc pour le contraste */
 
-        .form-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-        }
+        form { padding: 40px; }
+
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 25px; }
         .full-width { grid-column: span 2; }
 
         .field-group { display: flex; flex-direction: column; gap: 8px; }
-        .field-group label { font-size: 14px; font-weight: 600; color: #475569; }
+        .field-group label { font-size: 14px; font-weight: 800; color: var(--sidebar-bg); }
 
         .form-control { 
             width: 100%; 
-            padding: 12px 16px; 
-            border: 1px solid var(--border); 
-            border-radius: 8px; 
-            font-size: 14px;
-            transition: border 0.2s;
-            background: #fcfcfc;
+            padding: 14px 16px; 
+            border: 2px solid #cbd5e1;
+            border-radius: 12px; 
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--sidebar-bg);
+            transition: all 0.3s ease;
+            background: var(--white);
         }
-        .form-control:focus { outline: none; border-color: var(--primary); background: #fff; }
+        .form-control:focus { 
+            outline: none; 
+            border-color: var(--primary); 
+            box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.1);
+        }
 
         .btn-submit { 
-            background: var(--primary); 
+            background: var(--sidebar-bg); 
             color: white; 
-            padding: 14px 28px; 
+            padding: 16px 30px; 
             border: none; 
-            border-radius: 8px; 
-            font-weight: 600; 
+            border-radius: 12px; 
+            font-weight: 700; 
+            font-size: 16px;
             cursor: pointer; 
-            margin-top: 20px;
-            transition: 0.3s;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            justify-content: center;
+            margin-top: 25px;
+            transition: all 0.3s ease;
+            display: flex; align-items: center; gap: 12px; justify-content: center;
             width: 100%;
         }
-        .btn-submit:hover { background: var(--primary-hover); transform: translateY(-1px); }
-
-        .alert {
-            padding: 12px 16px;
-            border-radius: 8px;
-            background: #fef2f2;
-            color: var(--error);
-            border: 1px solid #fee2e2;
-            margin-bottom: 20px;
-            font-size: 14px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
+        .btn-submit:hover { 
+            background: var(--primary); 
+            transform: translateY(-2px);
         }
 
         .section-title {
             grid-column: span 2;
-            font-size: 14px;
-            text-transform: uppercase;
-            color: var(--text-muted);
-            letter-spacing: 1px;
-            margin-top: 15px;
-            border-bottom: 1px dashed var(--border);
+            font-size: 13px; font-weight: 800;
+            text-transform: uppercase; color: var(--primary);
+            letter-spacing: 1.2px; margin-top: 20px;
+            display: flex; align-items: center; gap: 10px;
             padding-bottom: 5px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .alert {
+            margin: 20px 40px 0 40px;
+            padding: 15px 20px; border-radius: 12px;
+            background: #fee2e2; color: var(--error);
+            border-left: 5px solid var(--error);
+            font-size: 14px; font-weight: 600;
+            display: flex; align-items: center; gap: 12px;
         }
     </style>
 </head>
@@ -200,22 +212,29 @@ if (isset($_POST['ajouter'])) {
 
 <div class="container">
     <aside class="sidebar">
-        <h3>Menu Médical</h3>
-        <a href="dashboard_medecin.php"><i class="fa-solid fa-chart-pie"></i> Tableau de bord</a>
-        <a href="patients.php" class="active"><i class="fa-solid fa-user-group"></i> Mes Patients</a>
-        <a href="suivis.php"><i class="fa-solid fa-file-medical"></i> Consultations</a>
-        <a href="../traitement/list.php"><i class="fa-solid fa-pills"></i> Traitements</a>
-        <div style="height: 1px; background: rgba(255,255,255,0.1); margin: 20px 0;"></div>
-        <a href="deconnexion.php" style="color: #fda4af;"><i class="fa-solid fa-power-off"></i> Déconnexion</a>
+        <h3 style="font-weight: 800;">Unité de Soins</h3>
+        <a href="dashboard_medecin.php"><i class="fa-solid fa-chart-line"></i> Vue Générale</a>
+        <a href="hospitalisation.php"><i class="fa-solid fa-bed-pulse"></i> Patients Admis</a>
+        <a href="patients.php" class="active"><i class="fa-solid fa-hospital-user"></i> Patients</a>
+        <a href="../traitement/list.php"><i class="fa-solid fa-file-prescription"></i> Traitements</a>
+        <a href="suivis.php"><i class="fa-solid fa-calendar-check"></i> Consultations</a>
+        <h3 style="font-weight: 800;">Analyse & Gestion</h3>
+        <a href="../admission/statistique.php"><i class="fa-solid fa-chart-pie"></i> Statistiques</a>
+        <a href="archives.php"><i class="fa-solid fa-box-archive"></i> Archives</a>
+        <a href="profil_medcin.php"><i class="fa-solid fa-user-gear"></i> Profil</a>
+        <div style="margin-top: 40px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+            <a href="deconnexion.php" style="color: #fda4af;"><i class="fa-solid fa-power-off"></i> Déconnexion</a>
+        </div>
     </aside>
 
     <main class="content">
-        <div class="breadcrumb">Gestion des patients / Nouveau</div>
-        <h1>Ajouter un patient</h1>
+        <div class="breadcrumb" style="text-align:center;">Gestion des patients / Nouveau Dossier</div>
+        <h1>Inscrire un nouveau patient</h1>
 
         <div class="card">
             <div class="card-header">
-                <h2><i class="fa-solid fa-address-card"></i> Fiche d'admission</h2>
+                <i class="fa-solid fa-id-card-alt" style="font-size: 24px;"></i>
+                <h2>Fiche d'identification</h2>
             </div>
 
             <?php if(!empty($form_message)): ?>
@@ -228,7 +247,7 @@ if (isset($_POST['ajouter'])) {
             <form method="POST" id="patientForm">
                 <div class="form-grid">
                     <div class="field-group">
-                        <label>CIN</label>
+                        <label>CIN (Carte d'Identité)</label>
                         <input type="text" name="cin" placeholder="Ex: AB12345" class="form-control" required>
                     </div>
                     <div class="field-group">
@@ -241,11 +260,11 @@ if (isset($_POST['ajouter'])) {
 
                     <div class="field-group">
                         <label>Nom</label>
-                        <input type="text" name="nom" class="form-control" required>
+                        <input type="text" name="nom" placeholder="Nom du patient" class="form-control" required>
                     </div>
                     <div class="field-group">
                         <label>Prénom</label>
-                        <input type="text" name="prenom" class="form-control" required>
+                        <input type="text" name="prenom" placeholder="Prénom du patient" class="form-control" required>
                     </div>
 
                     <div class="field-group">
@@ -253,12 +272,12 @@ if (isset($_POST['ajouter'])) {
                         <input type="date" name="date_naissance" class="form-control" required>
                     </div>
                     <div class="field-group">
-                        <label>Téléphone</label>
+                        <label>Téléphone portable</label>
                         <input type="text" name="telephone" placeholder="06XXXXXXXX" class="form-control" required>
                     </div>
 
                     <div class="field-group full-width">
-                        <label>Email</label>
+                        <label>Adresse Email</label>
                         <input type="email" name="email" placeholder="patient@exemple.com" class="form-control" required>
                     </div>
 
@@ -267,7 +286,7 @@ if (isset($_POST['ajouter'])) {
                     <div class="field-group">
                         <label>Groupe Sanguin</label>
                         <select name="groupe_sanguin" class="form-control">
-                            <option value="">Inconnu</option>
+                            <option value="">Sélectionner le groupe</option>
                             <option value="A+">A+</option>
                             <option value="A-">A-</option>
                             <option value="B+">B+</option>
@@ -290,18 +309,18 @@ if (isset($_POST['ajouter'])) {
                     </div>
 
                     <div class="field-group full-width">
-                        <label>Allergies connues</label>
-                        <textarea name="allergies" class="form-control" rows="2" placeholder="Ex: Pénicilline, Pollen... (Laissez vide si aucune)"></textarea>
+                        <label>Allergies & Antécédents</label>
+                        <textarea name="allergies" class="form-control" rows="3" placeholder="Notez ici les allergies connues ou laissez vide..."></textarea>
                     </div>
 
                     <div class="field-group full-width">
-                        <label>Adresse complète</label>
-                        <input type="text" name="adresse" class="form-control" required>
+                        <label>Adresse de résidence complète</label>
+                        <input type="text" name="adresse" placeholder="N°, Rue, Quartier, Ville" class="form-control" required>
                     </div>
                 </div>
 
                 <button type="submit" name="ajouter" class="btn-submit">
-                    <i class="fa-solid fa-plus-circle"></i> Créer le dossier patient
+                    <i class="fa-solid fa-save"></i> Enregistrer le Dossier Patient
                 </button>
             </form>
         </div>
@@ -312,7 +331,11 @@ if (isset($_POST['ajouter'])) {
 document.querySelectorAll('.form-control').forEach(input => {
     input.addEventListener('input', () => {
         const alert = document.getElementById('errorAlert');
-        if(alert) alert.style.display = 'none';
+        if(alert) {
+            alert.style.transition = '0.3s';
+            alert.style.opacity = '0';
+            setTimeout(() => alert.style.display = 'none', 300);
+        }
     });
 });
 </script>
