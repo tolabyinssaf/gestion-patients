@@ -53,6 +53,9 @@ $patients = $stmt->fetchAll(PDO::FETCH_ASSOC);
             --white: #ffffff;
             --header-height: 75px;
             --sidebar-width: 260px;
+            /* Couleurs Actions */
+            --action-yellow: #f59e0b;
+            --action-green: #0f766e;
         }
 
         * { margin:0; padding:0; box-sizing:border-box; font-family: 'Inter', sans-serif; }
@@ -82,7 +85,6 @@ $patients = $stmt->fetchAll(PDO::FETCH_ASSOC);
         .sidebar a:hover { background: rgba(255,255,255,0.05); color: #fff; }
         .sidebar a.active { background: var(--primary); color: #fff; box-shadow: 0 4px 12px rgba(15, 118, 110, 0.3); }
 
-        /* --- STYLISATION TABLEAU --- */
         .table-container {
             background: var(--white);
             border-radius: 16px;
@@ -103,9 +105,6 @@ $patients = $stmt->fetchAll(PDO::FETCH_ASSOC);
             border-bottom: 2px solid #f1f5f9;
         }
 
-        .custom-table tr { transition: all 0.2s ease; }
-        .custom-table tr:hover { background-color: #f8fafc; }
-        
         .custom-table td {
             padding: 16px 25px;
             border-bottom: 1px solid #f1f5f9;
@@ -113,7 +112,6 @@ $patients = $stmt->fetchAll(PDO::FETCH_ASSOC);
             color: #334155;
         }
 
-        /* --- ELEMENTS DESIGN --- */
         .avatar-green {
             background: linear-gradient(135deg, #ccfbf1 0%, #99f6e4 100%);
             color: #0f766e; 
@@ -138,15 +136,33 @@ $patients = $stmt->fetchAll(PDO::FETCH_ASSOC);
             background: #f0fdfa; padding: 4px 10px; border-radius: 6px;
         }
 
-        /* --- BOUTONS --- */
+        /* --- BOUTONS ACTIONS COLORÉS --- */
         .btn-action {
-            width: 40px; height: 40px; border-radius: 12px;
+            width: 38px; height: 38px; border-radius: 10px;
             display: inline-flex; align-items: center; justify-content: center;
-            transition: 0.3s; border: 1px solid var(--border);
-            background: white; color: #64748b; text-decoration: none;
+            transition: 0.3s; border: 1.5px solid var(--border);
+            background: white; text-decoration: none; font-size: 14px;
         }
-        .btn-edit:hover { background: #fffbeb; color: #d97706; border-color: #fef3c7; transform: translateY(-2px); }
-        .btn-folder:hover { background: #eff6ff; color: #2563eb; border-color: #dbeafe; transform: translateY(-2px); }
+
+        /* Edition -> JAUNE */
+        .btn-edit { color: var(--action-yellow); border-color: #fef3c7; }
+        .btn-edit:hover { 
+            background: var(--action-yellow); 
+            color: white; 
+            border-color: var(--action-yellow);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(245, 158, 11, 0.2);
+        }
+
+        /* Dossier -> VERT (Menu) */
+        .btn-folder { color: var(--action-green); border-color: #ccfbf1; }
+        .btn-folder:hover { 
+            background: var(--action-green); 
+            color: white; 
+            border-color: var(--action-green);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(15, 118, 110, 0.2);
+        }
 
         .sticky-search {
             position: sticky; top: var(--header-height);
@@ -195,7 +211,7 @@ $patients = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <main class="content">
         <div class="d-flex justify-content-between align-items-center mb-4">
             <div>
-                <h1 class="h3 fw-bold mb-1" style="letter-spacing: -0.5px;">Annuaire Patients</h1>
+                <h1 class="h3 fw-bold mb-1" style="letter-spacing: -0.5px;">Répertoire des Patients</h1>
                 <p class="text-muted small mb-0">Base de données centralisée du cabinet</p>
             </div>
             <a href="ajouter_patient.php" class="btn btn-primary px-4 py-2 rounded-pill shadow-sm fw-bold" style="background: var(--primary); border:none;">
@@ -215,10 +231,10 @@ $patients = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 </div>
 
                 <?php if($search || $selected_date): ?>
-                    <a href="patients_secr.php" class="btn btn-link text-danger text-decoration-none fw-bold small p-0 px-2">Réinitialiser</a>
+                    <a href="patients_secr.php" class="btn btn-outeline text-dark text-decoration-none fw-bold small p-0 px-2">Réinitialiser</a>
                 <?php endif; ?>
 
-                <button type="submit" class="btn btn-dark rounded-pill px-4 fw-bold">Rechercher</button>
+               
             </form>
         </div>
 
@@ -287,7 +303,6 @@ $patients = $stmt->fetchAll(PDO::FETCH_ASSOC);
 </div>
 
 <script>
-    // Déclencheur automatique du picker de date sur l'icône/texte
     document.querySelector('.date-trigger').addEventListener('click', function() {
         document.getElementById('dateInput').showPicker();
     });

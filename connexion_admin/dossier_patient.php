@@ -230,15 +230,14 @@ $admin = $stmt_admin->fetch(PDO::FETCH_ASSOC);
                 <div class="glass-card">
                     <h5 class="fw-800 mb-4 text-primary">Admissions Hospitalières</h5>
                     <table class="table table-custom">
-                        <thead><tr><th>Dates</th><th>Service</th><th>Chambre</th><th>Motif</th><th>Statut</th></tr></thead>
+                        <thead><tr><th>Dates</th><th>Service</th><th>Motif</th><th>Statut</th></tr></thead>
                         <tbody>
                             <?php foreach($list_adm as $adm): ?>
                             <tr>
                                 <td><div class="small fw-bold">Du <?= date('d/m/Y', strtotime($adm['date_admission'])) ?></div></td>
                                 <td class="fw-bold text-uppercase"><?= $adm['service'] ?></td>
-                                <td><span class="badge bg-dark">N° <?= $adm['chambre'] ?></span></td>
                                 <td><?= $adm['motif'] ?></td>
-                                <td><span class="badge bg-success px-2 py-1 small"><?= $adm['status'] ?></span></td>
+                                <td><span class="badge bg-success px-2 py-1 small"><?= $adm['statut'] ?></span></td>
                             </tr>
                             <?php endforeach; ?>
                         </tbody>

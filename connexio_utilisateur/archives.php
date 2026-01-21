@@ -2,20 +2,15 @@
 session_start();
 include("../config/connexion.php");
 
-// Vérification de l'authentification avec plus de flexibilité
+// Vérification de l'authentification
 if (!isset($_SESSION['user_id']) || 
     (!isset($_SESSION['role']) && !isset($_SESSION['user_role'])) || 
     ($_SESSION['role'] !== 'medecin' && $_SESSION['user_role'] !== 'medecin')) { 
-    
-    // Debug: Afficher les variables de session pour diagnostic
-    error_log("Session Debug - user_id: " . ($_SESSION['user_id'] ?? 'non défini'));
-    error_log("Session Debug - role: " . ($_SESSION['role'] ?? 'non défini'));
-    error_log("Session Debug - user_role: " . ($_SESSION['user_role'] ?? 'non défini'));
-    
     header("Location: ../connexio_utilisateur/login.php"); 
     exit; 
 }
 
+$nom_medecin = $_SESSION['user_nom'] ?? 'Médecin';
 $view = $_GET['view'] ?? 'menu';
 
 // Récupération des données
@@ -34,7 +29,7 @@ $countTraitements = $pdo->query("SELECT COUNT(*) FROM historique_suppressions")-
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Archives | MedCare Pro</title>
+    <title>Archives Premium | MedCare Pro</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -42,461 +37,215 @@ $countTraitements = $pdo->query("SELECT COUNT(*) FROM historique_suppressions")-
         :root {
             --primary: #0d9488; 
             --primary-dark: #0f172a;
-            --patient-theme: #4f46e5;
-            --traitement-theme: #dc2626;
-            --bg-soft: #f8fafc;
+            --sidebar-color: #1e293b;
+            --table-head: #111827;
+            --table-row-even: #f1f5f9;
+            --accent-patients: #10b981; 
+            --accent-traitements: #6366f1; 
         }
         
-        body { background-color: var(--bg-soft); font-family: 'Plus Jakarta Sans', sans-serif; color: #334155; margin: 0; }
+        body { background-color: #f8fafc; font-family: 'Plus Jakarta Sans', sans-serif; margin: 0; }
 
-        /* Navigation */
+        /* HEADER */
         header { 
             background: #ffffff; padding: 0 40px; height: 75px; 
             display: flex; justify-content: space-between; align-items: center; 
-            border-bottom: 1px solid #e2e8f0; position: fixed; width: 100%; top: 0; z-index: 1000; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05); position: fixed; width: 100%; top: 0; z-index: 1000; 
         }
-        .user-pill { background: var(--primary-dark); padding: 8px 18px; border-radius: 12px; color: #fff; font-weight: 700; font-size: 0.9rem; }
-        
-        .sidebar { width: 260px; background: var(--primary-dark); height: 100vh; position: fixed; padding: 100px 16px 24px; transition: 0.3s; }
-        .sidebar a { display: flex; align-items: center; gap: 12px; color: #94a3b8; text-decoration: none; padding: 12px 16px; border-radius: 10px; margin-bottom: 4px; font-weight: 500; }
-        .sidebar a:hover, .sidebar a.active { background: rgba(255,255,255,0.1); color: #fff; }
-        .sidebar a.active { background: var(--primary); }
+        .user-profile { display: flex; align-items: center; gap: 12px; background: var(--primary-dark); padding: 6px 15px; border-radius: 50px; color: white; }
 
-        .main-content { margin-left: 260px; padding: 110px 40px 40px; }
+        /* SIDEBAR */
+        .sidebar { width: 260px; background: var(--primary-dark); height: 100vh; position: fixed; padding: 100px 16px; }
+        .sidebar a { display: flex; align-items: center; gap: 12px; color: #94a3b8; text-decoration: none; padding: 12px 16px; border-radius: 12px; margin-bottom: 5px; transition: 0.3s; }
+        .sidebar a:hover, .sidebar a.active { background: var(--primary); color: white; }
+        .sidebar p { color: #475569; font-size: 0.7rem; text-transform: uppercase; font-weight: 800; padding-left: 15px; margin-top: 25px; }
 
-        /* Recherche */
-        .search-container {
-            background: white; border-radius: 15px; padding: 10px 20px;
-            display: flex; align-items: center; border: 1px solid #e2e8f0;
-            margin-bottom: 25px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);
-        }
-        .search-container i { color: #94a3b8; margin-right: 15px; }
-        .search-container input { border: none; outline: none; width: 100%; font-weight: 500; color: #1e293b; }
+        .main-content { margin-left: 260px; padding: 110px 40px; }
 
-        /* ======================== */
-        /* TABLEAUX AMÉLIORÉS - FONCÉS ET LISIBLES */
-        /* ======================== */
-        .table-card { 
-            background: #ffffff; 
-            border-radius: 15px; 
-            overflow: hidden;
-            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
-            border: 1px solid #e0e7ff;
-        }
-        
-        /* En-tête du tableau - plus foncé */
-        .table thead { 
-            background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
-        }
-        
-        .table thead th { 
-            color: #e2e8f0 !important; 
-            font-weight: 700 !important; 
-            text-transform: uppercase; 
-            font-size: 0.85rem !important; 
-            letter-spacing: 0.05em;
-            padding: 20px 25px !important; 
-            border-bottom: 2px solid #4a5568 !important;
-            border-top: none !important;
-            font-family: 'Plus Jakarta Sans', sans-serif;
-        }
-        
-        /* Corps du tableau - lignes alternées */
-        .table tbody tr { 
-            border-bottom: 1px solid #edf2f7;
-            transition: all 0.2s ease;
-        }
-        
-        .table tbody tr:nth-child(even) {
-            background-color: #f8fafc;
-        }
-        
-        .table tbody tr:nth-child(odd) {
-            background-color: #ffffff;
-        }
-        
-        .table tbody tr:hover {
-            background-color: #f0f9ff !important;
-            transform: scale(1.002);
-            box-shadow: 0 2px 8px rgba(13, 148, 136, 0.1);
-        }
-        
-        .table tbody td { 
-            padding: 18px 25px !important; 
-            vertical-align: middle !important; 
-            border-bottom: 1px solid #e2e8f0 !important;
-            color: #2d3748 !important;
-            font-weight: 500 !important;
-            font-size: 0.95rem !important;
-        }
-        
-        /* Cellules avec texte en gras et foncé */
-        .table tbody td .text-bold-dark { 
-            color: #1a202c !important; 
-            font-weight: 700 !important; 
-            font-size: 1rem !important; 
-            margin-bottom: 4px;
-            display: block;
-        }
-        
-        .table tbody td .text-sub { 
-            color: #718096 !important; 
-            font-size: 0.85rem !important;
-            display: block;
-        }
-        
-        /* Badges améliorés - plus contrastés */
-        .badge-date { 
-            background: #ebf8ff; 
-            color: #2b6cb0 !important; 
-            font-weight: 600; 
-            padding: 8px 16px; 
-            border-radius: 10px; 
-            font-size: 0.85rem; 
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            border: 1px solid #bee3f8;
-        }
-        
-        .badge-raison {
-            background: #fef2f2;
-            color: #dc2626 !important;
-            padding: 8px 16px;
-            border-radius: 10px;
-            font-size: 0.85rem;
-            font-weight: 600;
-            border: 1px solid #fecaca;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-        }
-        
-        .badge-medicament {
-            background: #f0f9ff;
-            color: #0369a1 !important;
-            padding: 8px 16px;
-            border-radius: 10px;
-            font-size: 0.85rem;
-            font-weight: 600;
-            border: 1px solid #bae6fd;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-        }
-        
-        /* Bordures et séparateurs */
-        .table {
-            border-collapse: separate;
-            border-spacing: 0;
-            margin-bottom: 0 !important;
-        }
-        
-        .table tbody tr:last-child td {
-            border-bottom: none !important;
-        }
-        
-        /* En-tête de section tableau */
-        .table-header {
-            background: #f7fafc;
-            padding: 20px 30px;
-            border-bottom: 2px solid #e2e8f0;
-        }
-        
-        .table-header h3 {
-            color: #2d3748;
-            font-weight: 700;
-            margin: 0;
-            font-size: 1.3rem;
-        }
-
-        /* ======================== */
-        /* FIN DES MODIFICATIONS TABLEAUX */
-        /* ======================== */
-        
-        .text-bold-dark { color: #0f172a; font-weight: 700; font-size: 0.95rem; }
-        .text-sub { color: #64748b; font-size: 0.85rem; }
-
-        /* Bouton Retour */
-        .btn-return {
-            display: inline-flex; align-items: center; gap: 8px;
-            color: #64748b; text-decoration: none; font-weight: 600;
-            margin-bottom: 20px; transition: 0.2s;
-        }
-        .btn-return:hover { color: var(--primary); }
-
-        /* Cards Menu */
+        /* CARTES MENU (STYLE DEMANDÉ) */
         .menu-card {
-            background: white; border-radius: 24px; padding: 30px; border: 1px solid #e2e8f0;
-            transition: all 0.3s ease; text-decoration: none !important; color: inherit; height: 100%;
-            display: flex; flex-direction: column; align-items: center; text-align: center;
+            background: var(--sidebar-color); border-radius: 28px; padding: 40px 30px;
+            border: 1px solid rgba(255,255,255,0.05); text-decoration: none !important;
+            height: 100%; display: flex; flex-direction: column; align-items: center; text-align: center;
+            transition: all 0.4s; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
         }
-        .menu-card:hover { transform: translateY(-5px); border-color: var(--primary); box-shadow: 0 10px 20px rgba(0,0,0,0.05); }
-        .icon-box { width: 70px; height: 70px; border-radius: 20px; display: flex; align-items: center; justify-content: center; font-size: 1.8rem; margin-bottom: 20px; }
-        
-        /* État vide */
-        .empty-state {
-            padding: 40px 20px;
-            text-align: center;
-            color: #718096;
+        .menu-card:hover { transform: translateY(-10px); background: #0f172a; }
+        .icon-box { width: 70px; height: 70px; border-radius: 20px; display: flex; align-items: center; justify-content: center; font-size: 2rem; margin-bottom: 20px; }
+        .card-patients .icon-box { background: rgba(16, 185, 129, 0.2); color: var(--accent-patients); }
+        .card-traitements .icon-box { background: rgba(99, 102, 241, 0.2); color: var(--accent-traitements); }
+        .menu-card h4 { color: white; font-weight: 700; }
+        .menu-card p { color: #94a3b8; font-size: 0.85rem; }
+
+        /* TABLEAU MODERNE FONCÉ & COLORÉ */
+        .table-wrapper {
+            background: white; border-radius: 24px; padding: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.05); border: 1px solid #e2e8f0;
         }
-        
-        .empty-state i {
-            font-size: 3rem;
-            margin-bottom: 15px;
-            opacity: 0.5;
+        .custom-table { width: 100%; border-collapse: separate; border-spacing: 0 10px; }
+        .custom-table thead th {
+            background: var(--table-head); color: #cbd5e1;
+            padding: 20px; font-size: 0.75rem; text-transform: uppercase;
+            letter-spacing: 1px; border: none; font-weight: 700;
         }
-        
-        /* Styles pour les données JSON */
-        .traitement-info {
-            background: #f8fafc;
-            border-radius: 8px;
-            padding: 15px;
-            border-left: 4px solid #4f46e5;
-            margin-top: 10px;
-        }
-        
-        .info-row {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 8px;
+        .custom-table thead th:first-child { border-radius: 12px 0 0 12px; }
+        .custom-table thead th:last-child { border-radius: 0 12px 12px 0; }
+
+        .custom-table tbody tr { 
+            background: #ffffff; 
+            transition: all 0.3s;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02);
         }
         
-        .info-label {
-            font-weight: 600;
-            color: #4b5563;
-            font-size: 0.85rem;
+        .custom-table tbody td { 
+            padding: 18px 20px; border-top: 1px solid #f1f5f9; border-bottom: 1px solid #f1f5f9;
+            color: #1e293b; font-weight: 500;
         }
-        
-        .info-value {
-            color: #1f2937;
-            font-weight: 500;
+        .custom-table tbody td:first-child { border-left: 1px solid #f1f5f9; border-radius: 12px 0 0 12px; }
+        .custom-table tbody td:last-child { border-right: 1px solid #f1f5f9; border-radius: 0 12px 12px 0; }
+
+        /* Couleurs pour les lignes Patients */
+        .row-patient { border-left: 4px solid var(--accent-patients) !important; }
+        /* Couleurs pour les lignes Traitements */
+        .row-traitement { border-left: 4px solid var(--accent-traitements) !important; }
+
+        .custom-table tbody tr:hover { 
+            background: #f8fafc; transform: scale(1.01);
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05);
         }
+
+        /* RECHERCHE */
+        .search-bar {
+            background: #f1f5f9; border-radius: 15px; border: 1px solid #e2e8f0;
+            padding: 12px 20px; display: flex; align-items: center; margin-bottom: 25px;
+        }
+        .search-bar input { background: transparent; border: none; outline: none; width: 100%; margin-left: 10px; font-weight: 600; color: var(--primary-dark); }
+
+        /* BADGES */
+        .tag { padding: 6px 12px; border-radius: 8px; font-size: 0.75rem; font-weight: 700; }
+        .tag-date { background: var(--primary-dark); color: #fff; }
+        .info-box-table { background: #f8fafc; padding: 10px; border-radius: 10px; border: 1px solid #e2e8f0; }
     </style>
 </head>
 <body>
 
 <header>
-    <img src="../images/logo_app2.png" alt="Logo" style="height: 45px;">
-    <div class="user-pill">
-        <i class="fa-solid fa-shield-halved me-2"></i>ESPACE ADMINISTRATEUR
+    <img src="../images/logo_app2.png" alt="Logo" style="height: 40px;">
+    <div class="user-profile">
+        <i class="fa-solid fa-user-doctor"></i>
+        <span style="font-weight: 700; font-size: 0.85rem;">Dr. <?= htmlspecialchars($nom_medecin) ?></span>
     </div>
 </header>
 
-<div class="wrapper">
    <aside class="sidebar">
         <p style="font-weight: 800;">Unité de Soins</p>
-        <a href="dashboard_medecin.php" class="active"><i class="fa-solid fa-chart-line"></i> Vue Générale</a>
+        <a href="dashboard_medecin.php"><i class="fa-solid fa-chart-line"></i> Vue Générale</a>
         <a href="hospitalisation.php"><i class="fa-solid fa-bed-pulse"></i> Patients Admis</a>
         <a href="patients.php"><i class="fa-solid fa-hospital-user"></i> Patients</a>
         <a href="../traitement/list.php"><i class="fa-solid fa-file-prescription"></i> Traitements</a>
         <a href="suivis.php"><i class="fa-solid fa-calendar-check"></i> Consultations</a>
         <p style="font-weight: 800;">Analyse & Gestion</p>
         <a href="../admission/statistique.php"><i class="fa-solid fa-chart-pie"></i> Statistiques</a>
-        <a href="archives.php"><i class="fa-solid fa-box-archive"></i> Archives</a>
+        <a href="archives.php" class="active"><i class="fa-solid fa-box-archive"></i> Archives</a>
         <a href="profil_medcin.php"><i class="fa-solid fa-user-gear"></i> Profil</a>
         <div style="margin-top: 40px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
             <a href="deconnexion.php" style="color: #fda4af;"><i class="fa-solid fa-power-off"></i> Déconnexion</a>
         </div>
     </aside>
 
-    <main class="main-content">
-        
-        <?php if ($view === 'menu'): ?>
-            <h2 class="fw-bold mb-1">Centre d'Archivage</h2>
-            <p class="text-muted mb-5">Consultez les données qui ne sont plus actives dans le système.</p>
-            
-            <div class="row g-4">
-                <div class="col-md-6">
-                    <a href="?view=patients" class="menu-card">
-                        <div class="icon-box" style="background: #eef2ff; color: #4f46e5;"><i class="fa-solid fa-hospital-user"></i></div>
-                        <h4 class="fw-bold">Archives Patients</h4>
-                        <p class="text-muted small">Dossiers médicaux et historiques des patients supprimés.</p>
-                        <span class="badge bg-primary rounded-pill px-3 py-2"><?= $countPatients ?> Enregistrements</span>
-                    </a>
-                </div>
-                <div class="col-md-6">
-                    <a href="?view=traitements" class="menu-card">
-                        <div class="icon-box" style="background: #fef2f2; color: #dc2626;"><i class="fa-solid fa-pills"></i></div>
-                        <h4 class="fw-bold">Archives Traitements</h4>
-                        <p class="text-muted small">Historique des prescriptions et traitements supprimés.</p>
-                        <span class="badge bg-danger rounded-pill px-3 py-2"><?= $countTraitements ?> Enregistrements</span>
-                    </a>
-                </div>
+<main class="main-content">
+    <?php if ($view === 'menu'): ?>
+        <div class="mb-5">
+            <h2 style="font-weight: 800; color: var(--primary-dark);">Espace Archivage</h2>
+            <p class="text-muted">Sélectionnez une catégorie pour explorer les données historiques.</p>
+        </div>
+
+        <div class="row g-4">
+            <div class="col-md-6">
+                <a href="?view=patients" class="menu-card card-patients">
+                    <div class="icon-box"><i class="fa-solid fa-hospital-user"></i></div>
+                    <h4>Base Patients</h4>
+                    <p>Historique des dossiers médicaux clôturés.</p>
+                    <div class="mt-3 tag tag-date"><?= $countPatients ?> Dossiers</div>
+                </a>
             </div>
-
-        <?php else: ?>
-            <a href="archives.php" class="btn-return"><i class="fa-solid fa-arrow-left"></i> Retour aux catégories</a>
-            
-            <h3 class="fw-bold mb-4">
-                <?= $view === 'patients' ? 'Registre des Patients Archivés' : 'Registre des Traitements Archivés' ?>
-            </h3>
-
-            <div class="search-container">
-                <i class="fa-solid fa-magnifying-glass"></i>
-                <input type="text" id="archiveSearch" placeholder="Rechercher par nom, médicament, raison ou n'importe quel détail...">
+            <div class="col-md-6">
+                <a href="?view=traitements" class="menu-card card-traitements">
+                    <div class="icon-box"><i class="fa-solid fa-clock-rotate-left"></i></div>
+                    <h4>Traitements & Soins</h4>
+                    <p>Journal des modifications et suppressions de soins.</p>
+                    <div class="mt-3 tag tag-date"><?= $countTraitements ?> Actions</div>
+                </a>
             </div>
+        </div>
 
-            <div class="table-card">
-                <div class="table-responsive">
-                    <table class="table table-hover mb-0" id="tableData">
-                        <thead>
-                            <?php if ($view === 'patients'): ?>
-                                <tr>
-                                    <th>Patient</th>
-                                    <th>Détails Personnels</th>
-                                    <th>Coordonnées</th>
-                                    <th>Date d'Archivage</th>
-                                    <th>ID Origine</th>
-                                </tr>
-                            <?php else: ?>
-                                <tr>
-                                    <th>Traitement</th>
-                                    <th>Détails de Suppression</th>
-                                    <th>Médicament & Posologie</th>
-                                    <th>Date de Suppression</th>
-                                    <th>ID Origine</th>
-                                </tr>
-                            <?php endif; ?>
-                        </thead>
-                        <tbody>
-                            <?php if (empty($data)): ?>
-                                <tr>
-                                    <td colspan="5" class="text-center py-5">
-                                        <div class="empty-state">
-                                            <i class="fa-solid fa-box-open"></i>
-                                            <h4 class="text-muted">Aucune donnée trouvée dans les archives.</h4>
+    <?php else: ?>
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h3 style="font-weight: 800;"><?= $view === 'patients' ? 'Registre Patients' : 'Registre Traitements' ?></h3>
+            <a href="archives.php" class="btn btn-dark btn-sm rounded-pill px-3">Retour</a>
+        </div>
+
+        <div class="search-bar">
+            <i class="fa-solid fa-search text-muted"></i>
+            <input type="text" id="archiveSearch" placeholder="Filtrage intelligent...">
+        </div>
+
+        <div class="table-wrapper">
+            <div class="table-responsive">
+                <table class="custom-table" id="tableData">
+                    <thead>
+                        <?php if ($view === 'patients'): ?>
+                            <tr>
+                                <th>Patient</th>
+                                <th>Sexe / Naissance</th>
+                                <th>Téléphone</th>
+                                <th>Archivé le</th>
+                                <th>Code ID</th>
+                            </tr>
+                        <?php else: ?>
+                            <tr>
+                                <th>ID Soin</th>
+                                <th>Motif de Retrait</th>
+                                <th>Détails Historiques</th>
+                                <th>Date d'action</th>
+                            </tr>
+                        <?php endif; ?>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($data as $item): ?>
+                            <tr class="<?= $view === 'patients' ? 'row-patient' : 'row-traitement' ?>">
+                                <?php if ($view === 'patients'): ?>
+                                    <td><strong style="color: var(--primary-dark);"><?= strtoupper($item['nom']) ?></strong> <?= $item['prenom'] ?></td>
+                                    <td><span class="tag" style="background: #e2e8f0;"><?= $item['sexe'] ?></span> <small class="ms-2"><?= $item['date_naissance'] ?></small></td>
+                                    <td><i class="fa-solid fa-phone-alt me-2 text-muted"></i><?= $item['telephone'] ?></td>
+                                    <td><span class="tag tag-date"><?= date('d/m/Y', strtotime($item['date_supprimee'])) ?></span></td>
+                                    <td><code>#<?= $item['id_patient'] ?></code></td>
+                                <?php else: ?>
+                                    <td><span class="fw-bold">#TRT-<?= $item['id_traitement'] ?></span></td>
+                                    <td><span class="badge bg-danger-subtle text-danger p-2 rounded-3"><?= htmlspecialchars($item['raison_suppression']) ?></span></td>
+                                    <td>
+                                        <?php $dt = json_decode($item['donnees_traitement'], true); ?>
+                                        <div class="info-box-table">
+                                            <div style="font-weight: 700; color: var(--accent-traitements);"><?= $dt['medicament'] ?? 'N/A' ?></div>
+                                            <div class="small text-muted">Patient: <?= $dt['nom_patient'] ?? 'Inconnu' ?></div>
                                         </div>
                                     </td>
-                                </tr>
-                            <?php endif; ?>
-
-                            <?php foreach ($data as $item): ?>
-                                <tr>
-                                    <?php if ($view === 'patients'): ?>
-                                        <!-- Affichage des patients archivés (identique à avant) -->
-                                        <td>
-                                            <div class="text-bold-dark">
-                                                <i class="fa-solid fa-user-circle me-2 text-primary"></i>
-                                                <?= strtoupper($item['nom']) ?> <?= $item['prenom'] ?>
-                                            </div>
-                                            <div class="text-sub">
-                                                <i class="fa-solid fa-folder me-1"></i> Patient archivé
-                                            </div>
-                                        </td>
-                                        <td>
-                                            <span class="badge-role">
-                                                <i class="fa-solid fa-venus-mars me-1"></i>
-                                                <?= $item['sexe'] ?>
-                                            </span>
-                                            <div class="text-sub mt-2">
-                                                <i class="fa-solid fa-calendar-day me-1"></i>
-                                                Né(e) le <?= $item['date_naissance'] ?>
-                                            </div>
-                                        </td>
-                                        <td>
-                                            <div class="text-bold-dark">
-                                                <i class="fa-solid fa-phone me-2 text-success"></i>
-                                                <?= $item['telephone'] ?>
-                                            </div>
-                                            <div class="text-sub mt-2">
-                                                <i class="fa-solid fa-envelope me-2"></i>
-                                                <?= $item['email'] ?>
-                                            </div>
-                                        </td>
-                                        <td>
-                                            <span class="badge-date">
-                                                <i class="fa-regular fa-calendar-xmark me-2"></i>
-                                                <?= date('d/m/Y', strtotime($item['date_supprimee'])) ?>
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <div class="text-sub fw-bold">
-                                                <i class="fa-solid fa-hashtag me-1"></i>
-                                                #<?= $item['id_patient'] ?>
-                                            </div>
-                                        </td>
-                                    <?php else: ?>
-                                        <!-- Affichage des traitements archivés -->
-                                        <td>
-                                            <div class="text-bold-dark">
-                                                <i class="fa-solid fa-file-prescription me-2 text-danger"></i>
-                                                Traitement #<?= $item['id_traitement'] ?>
-                                            </div>
-                                            <div class="text-sub">
-                                                <i class="fa-solid fa-trash-can me-1"></i>
-                                                Prescription supprimée
-                                            </div>
-                                        </td>
-                                        <td>
-                                            <span class="badge-raison">
-                                                <i class="fa-solid fa-triangle-exclamation me-1"></i>
-                                                <?= htmlspecialchars($item['raison_suppression']) ?>
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <?php 
-                                            // Décoder les données JSON du traitement
-                                            $donnees_traitement = json_decode($item['donnees_traitement'], true);
-                                            if ($donnees_traitement):
-                                            ?>
-                                            <div class="traitement-info">
-                                                <div class="info-row">
-                                                    <span class="info-label">Médicament:</span>
-                                                    <span class="info-value"><?= htmlspecialchars($donnees_traitement['medicament'] ?? 'Non spécifié') ?></span>
-                                                </div>
-                                                <div class="info-row">
-                                                    <span class="info-label">Posologie:</span>
-                                                    <span class="info-value"><?= htmlspecialchars($donnees_traitement['description'] ?? 'Non spécifié') ?></span>
-                                                </div>
-                                                <div class="info-row">
-                                                    <span class="info-label">Patient:</span>
-                                                    <span class="info-value"><?= htmlspecialchars($donnees_traitement['nom_patient'] ?? 'Inconnu') ?></span>
-                                                </div>
-                                            </div>
-                                            <?php else: ?>
-                                                <span class="badge-medicament">
-                                                    <i class="fa-solid fa-pills me-1"></i>
-                                                    Données non disponibles
-                                                </span>
-                                            <?php endif; ?>
-                                        </td>
-                                        <td>
-                                            <span class="badge-date text-danger">
-                                                <i class="fa-regular fa-calendar-minus me-2"></i>
-                                                <?= date('d/m/Y à H:i', strtotime($item['date_suppression'])) ?>
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <div class="text-sub fw-bold">
-                                                <i class="fa-solid fa-hashtag me-1"></i>
-                                                #<?= $item['id_suppression'] ?>
-                                            </div>
-                                            <div class="text-sub mt-2">
-                                                <i class="fa-solid fa-prescription-bottle-medical me-1"></i>
-                                                Traitement #<?= $item['id_traitement'] ?>
-                                            </div>
-                                        </td>
-                                    <?php endif; ?>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
+                                    <td><span class="tag tag-date"><?= date('d/m/Y H:i', strtotime($item['date_suppression'])) ?></span></td>
+                                <?php endif; ?>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
             </div>
-        <?php endif; ?>
-
-    </main>
-</div>
+        </div>
+    <?php endif; ?>
+</main>
 
 <script>
     document.getElementById('archiveSearch')?.addEventListener('keyup', function() {
-        const value = this.value.toLowerCase();
-        const rows = document.querySelectorAll('#tableData tbody tr');
-        
+        let value = this.value.toLowerCase();
+        let rows = document.querySelectorAll('#tableData tbody tr');
         rows.forEach(row => {
-            const text = row.innerText.toLowerCase();
-            row.style.display = text.includes(value) ? '' : 'none';
+            row.style.display = row.innerText.toLowerCase().includes(value) ? '' : 'none';
         });
     });
 </script>

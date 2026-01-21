@@ -251,7 +251,6 @@ function clearMessage() {
     <nav>
         <a href="index.php">Accueil</a>
         <a href="services.php">Services</a>
-        <a href="#">À propos</a>
         <a href="contact.php">Contact</a>
         <a href="login.php" class="btn">Connexion</a>
     </nav>

@@ -37,7 +37,6 @@ if(isset($_POST['submit'])) {
             $stmt = $pdo->prepare("CALL sp_ajouter_traitement(?, ?, ?, ?, ?)");
             $stmt->execute([$id_patient, $description, $date_traitement, $medicament, $suivi]);
             
-            $result = $stmt->fetch();
             $message = 'Traitement ajouté avec succès';
             header("Location: list.php?success=" . urlencode($message));
             exit();
@@ -57,153 +56,168 @@ if(isset($_POST['submit'])) {
     <title>Nouveau Traitement | MedCare</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary: #0f766e;
-            --primary-light: #f0fdfa;
-            --sidebar-bg: #0f172a;
+            --primary: #0f766e; 
+            --primary-hover: #0d9488;
+            --sidebar-bg: #0f172a; 
+            --input-dark: #1e293b; 
             --bg-body: #f1f5f9;
-            --text-main: #0f172a;
-            --text-muted: #64748b;
             --white: #ffffff;
-            --border: #cbd5e1;
-            --error: #dc2626;
+            --header-height: 75px;
+            --sidebar-width: 260px;
         }
 
-        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Plus Jakarta Sans', sans-serif; }
-        body { background: var(--bg-body); color: var(--text-main); }
+        * { margin:0; padding:0; box-sizing:border-box; font-family: 'Inter', sans-serif; }
+        body { background: var(--bg-body); color: #1e293b; }
 
         /* HEADER */
-        header {
-            background: var(--white);
-            padding: 0 40px; height: 75px;
-            display: flex; justify-content: space-between; align-items: center;
-            border-bottom: 1px solid var(--border);
-            position: fixed; top: 0; width: 100%; z-index: 1000;
-        }
-        .logo { height: 45px; }
-        .user-pill {
-            background: var(--primary-light); padding: 8px 18px; border-radius: 12px;
-            display: flex; align-items: center; gap: 10px;
-            font-size: 14px; font-weight: 600; color: var(--primary);
-            border: 1px solid rgba(15, 118, 110, 0.2);
+        header { 
+            background: var(--white); 
+            padding: 0 40px; 
+            height: var(--header-height); 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            border-bottom: 1px solid #e2e8f0; 
+            position: fixed; 
+            top: 0; left: 0; right: 0; 
+            z-index: 1000; 
         }
 
-        /* LAYOUT */
-        .container { display: flex; padding-top: 75px; }
-        
+        /* SIDEBAR */
         .sidebar { 
-            width: 260px; background: var(--sidebar-bg); 
-            padding: 24px 16px; position: fixed; 
-            height: calc(100vh - 75px); overflow-y: auto;
+            width: var(--sidebar-width); 
+            background: var(--sidebar-bg); 
+            padding: 24px 16px; 
+            position: fixed; 
+            top: var(--header-height); 
+            left: 0; bottom: 0; 
+            z-index: 999; 
         }
         .sidebar h3 { color: rgba(255,255,255,0.3); font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 20px; padding-left: 12px; }
-        .sidebar a { display: flex; align-items: center; gap: 12px; color: #94a3b8; text-decoration: none; padding: 12px 16px; border-radius: 10px; margin-bottom: 5px; transition: 0.2s; }
+        .sidebar a { display: flex; align-items: center; gap: 12px; color: #94a3b8; text-decoration: none; padding: 12px 16px; border-radius: 10px; margin-bottom: 5px; transition: 0.3s; }
         .sidebar a:hover { background: rgba(255,255,255,0.05); color: #fff; }
         .sidebar a.active { background: var(--primary); color: #fff; }
 
-        /* CONTENT */
-        .content { flex: 1; padding: 40px; margin-left: 260px; }
-        .breadcrumb { font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 8px; text-align: center; text-transform: uppercase; }
-        .content h1 { font-size: 30px; font-weight: 800; color: var(--sidebar-bg); margin-bottom: 30px; text-align: center; }
+        .user-pill { background: #f0fdfa; padding: 8px 18px; border-radius: 12px; display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; color: var(--primary); }
+        .content { margin-left: var(--sidebar-width); padding: 30px 40px; margin-top: var(--header-height); }
 
-        /* CARD STYLE (Exactly like ajouter_patient) */
-        .card { 
-            background: #f8fafc; 
-            border-radius: 20px; 
-            border: 2px solid var(--primary); 
-            box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.1);
-            overflow: hidden;
-            max-width: 850px; 
+        /* CARD STYLE */
+        .form-card {
+            background: var(--white);
+            border-radius: 24px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 15px 35px -5px rgba(0, 0, 0, 0.07);
+            max-width: 900px;
             margin: 0 auto;
+            overflow: hidden;
         }
-        .card-header { 
-            background: var(--primary); 
-            padding: 20px 40px; 
-            display: flex; 
-            align-items: center; 
-            gap: 15px; 
+
+        .form-header-profile {
+            padding: 40px;
+            background: var(--primary);
+            display: flex; align-items: center; gap: 25px;
+            color: white;
+            border-bottom: 4px solid rgba(0,0,0,0.1);
         }
-        .card-header h2 { font-size: 20px; color: #fff; font-weight: 700; }
-        .card-header i { color: #fff; font-size: 24px; } 
 
-        form { padding: 40px; }
-        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 25px; }
-        .full-width { grid-column: span 2; }
-
-        .field-group { display: flex; flex-direction: column; gap: 8px; }
-        .field-group label { font-size: 14px; font-weight: 800; color: var(--sidebar-bg); }
-        .required::after { content: ' *'; color: var(--error); }
-
-        .form-control { 
-            width: 100%; padding: 14px 16px; 
-            border: 2px solid #cbd5e1; border-radius: 12px; 
-            font-size: 15px; font-weight: 600;
-            background: var(--white); transition: all 0.3s;
+        .avatar-huge {
+            width: 90px; height: 90px; 
+            background: rgba(255,255,255,0.15); 
+            border-radius: 22px; display: flex; align-items: center; justify-content: center;
+            font-size: 40px; border: 2px solid rgba(255,255,255,0.4);
         }
-        .form-control:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.1); }
 
-        /* Patient Info Banner */
-        .patient-info-banner {
-            grid-column: span 2;
-            background: var(--primary-light);
-            padding: 15px;
+        .header-title-small { font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600; opacity: 0.85; margin-bottom: 4px; }
+        .header-title-main { font-size: 26px; font-weight: 800; margin-bottom: 6px; letter-spacing: -0.5px; }
+
+        .form-body { padding: 40px; }
+
+        .section-separator {
+            display: flex; align-items: center; margin: 30px 0 20px 0;
+            color: var(--primary); font-weight: 700; font-size: 13px;
+            text-transform: uppercase; letter-spacing: 1px;
+        }
+        .section-separator i { margin-right: 12px; }
+        .section-separator::after { content: ""; flex: 1; height: 1px; background: #e2e8f0; margin-left: 15px; }
+
+        .form-label { font-weight: 600; font-size: 13px; color: #64748b; margin-bottom: 8px; display: block; }
+        .input-group-custom { position: relative; }
+        .input-group-custom i { position: absolute; left: 18px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 15px; z-index: 10; }
+        .input-group-custom textarea + i { top: 20px; transform: none; }
+
+        .form-control-modern {
+            width: 100%;
+            padding: 13px 15px 13px 50px;
+            background: var(--input-dark);
+            border: 1px solid var(--input-dark);
             border-radius: 12px;
-            border: 1px dashed var(--primary);
+            color: #ffffff;
+            font-size: 14px;
+            transition: 0.3s;
+        }
+        .form-control-modern:focus { outline: none; background: #334155; box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.2); }
+        .form-control-modern::placeholder { color: #94a3b8; opacity: 0.6; }
+
+        .form-select-modern {
+            padding: 13px 15px 13px 50px;
+            background: var(--input-dark);
+            border: 1px solid var(--input-dark);
+            border-radius: 12px;
+            width: 100%;
+            color: #ffffff;
+            font-size: 14px;
+            appearance: none;
+        }
+
+        /* Banner Patient Rapide */
+        .patient-quick-info {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 15px 20px;
+            margin-bottom: 20px;
             display: grid;
             grid-template-columns: repeat(3, 1fr);
             gap: 15px;
-            margin-bottom: 10px;
         }
-        .info-box span { display: block; }
-        .info-label { font-size: 11px; text-transform: uppercase; color: var(--primary); font-weight: 700; }
-        .info-value { font-weight: 700; color: var(--sidebar-bg); }
+        .info-item .label { font-size: 11px; text-transform: uppercase; color: var(--primary); font-weight: 700; display: block; }
+        .info-item .val { font-weight: 700; color: var(--sidebar-bg); font-size: 14px; }
 
-        .btn-submit { 
-            background: var(--sidebar-bg); color: white; 
-            padding: 16px; border: none; border-radius: 12px; 
-            font-weight: 700; font-size: 16px; cursor: pointer; 
-            margin-top: 25px; width: 100%;
-            display: flex; align-items: center; gap: 12px; justify-content: center;
-            transition: 0.3s;
+        .btn-submit-modern {
+            background: var(--primary); color: white; padding: 18px 35px;
+            border-radius: 14px; font-weight: 700; border: none; transition: 0.3s;
+            display: flex; align-items: center; gap: 12px; width: 100%; justify-content: center;
+            text-transform: uppercase; letter-spacing: 1px; font-size: 15px;
+            margin-top: 20px;
         }
-        .btn-submit:hover { background: var(--primary); transform: translateY(-2px); }
+        .btn-submit-modern:hover { background: var(--primary-hover); transform: translateY(-2px); box-shadow: 0 10px 20px rgba(15, 118, 110, 0.3); }
 
-        .section-title {
-            grid-column: span 2; font-size: 13px; font-weight: 800;
-            text-transform: uppercase; color: var(--primary);
-            letter-spacing: 1.2px; margin-top: 20px;
-            display: flex; align-items: center; gap: 10px;
-            border-bottom: 2px solid #e2e8f0; padding-bottom: 5px;
-        }
-
-        .alert {
-            margin: 20px 40px 0 40px; padding: 15px; border-radius: 12px;
-            background: #fee2e2; color: var(--error); border-left: 5px solid var(--error);
-            font-weight: 600; display: flex; align-items: center; gap: 10px;
-        }
+        .char-counter { text-align: right; font-size: 11px; color: #94a3b8; margin-top: 5px; font-weight: 600; }
     </style>
 </head>
 <body>
 
 <header>
-    <img src="../images/logo_app2.png" alt="Logo" class="logo">
+    <img src="../images/logo_app2.png" alt="Logo" style="height: 45px;">
     <div class="user-pill">
         <i class="fa-solid fa-user-md"></i>
         <span>Espace Médical</span>
     </div>
 </header>
 
-<div class="container">
+<div class="wrapper">
     <aside class="sidebar">
-        <h3 style="font-weight: 800;">Unité de Soins</h3>
+        <h3>Unité de Soins</h3>
         <a href="../connexio_utilisateur/dashboard_medecin.php"><i class="fa-solid fa-chart-line"></i> Vue Générale</a>
         <a href="../connexio_utilisateur/hospitalisation.php"><i class="fa-solid fa-bed-pulse"></i> Patients Admis</a>
         <a href="../connexio_utilisateur/patients.php"><i class="fa-solid fa-hospital-user"></i> Patients</a>
         <a href="list.php" class="active"><i class="fa-solid fa-file-prescription"></i> Traitements</a>
         <a href="../connexio_utilisateur/suivis.php"><i class="fa-solid fa-calendar-check"></i> Consultations</a>
-        <h3 style="font-weight: 800;">Analyse & Gestion</h3>
+        <h3>Analyse & Gestion</h3>
         <a href="../admission/statistique.php"><i class="fa-solid fa-chart-pie"></i> Statistiques</a>
         <a href="../connexio_utilisateur/archives.php"><i class="fa-solid fa-box-archive"></i> Archives</a>
         <a href="../connexio_utilisateur/profil_medcin.php"><i class="fa-solid fa-user-gear"></i> Profil</a>
@@ -213,90 +227,109 @@ if(isset($_POST['submit'])) {
     </aside>
 
     <main class="content">
-        <div class="breadcrumb">Traitements / Nouvelle Prescription</div>
-        <h1>Ajouter un nouveau traitement</h1>
-
-        <div class="card">
-            <div class="card-header">
-                <i class="fa-solid fa-file-medical"></i>
-                <h2>Fiche de prescription médicale</h2>
+        <div class="form-card">
+            <div class="form-header-profile">
+                <div class="avatar-huge">
+                    <i class="fa-solid fa-file-medical"></i>
+                </div>
+                <div>
+                    <div class="header-title-small">Prescription Médicale</div>
+                    <div class="header-title-main">Nouveau Traitement</div>
+                </div>
             </div>
 
             <?php if($message): ?>
-                <div class="alert">
-                    <i class="fa-solid fa-circle-exclamation"></i>
-                    <?= htmlspecialchars($message) ?>
+                <div class="alert alert-danger mx-4 mt-4 mb-0 border-0 shadow-sm">
+                    <i class="fa-solid fa-circle-exclamation me-2"></i><?= htmlspecialchars($message) ?>
                 </div>
             <?php endif; ?>
 
-            <form method="POST" id="traitementForm">
-                <div class="form-grid">
-                    
-                    <div class="field-group full-width">
-                        <label class="required">Sélectionner le patient</label>
-                        <select name="id_patient" id="id_patient" class="form-control" required onchange="afficherInfosPatient(this.value)">
-                            <option value="">-- Choisir un patient --</option>
-                            <?php
-                            $stmt = $pdo->query("SELECT * FROM patients ORDER BY nom, prenom");
-                            while($p = $stmt->fetch()):
-                                $sel = ($patient_id > 0 && $p['id_patient'] == $patient_id) ? 'selected' : '';
-                            ?>
-                            <option value="<?= $p['id_patient'] ?>" 
-                                    data-nom="<?= htmlspecialchars($p['nom']) ?>"
-                                    data-prenom="<?= htmlspecialchars($p['prenom']) ?>"
-                                    data-naissance="<?= $p['date_naissance'] ?>"
-                                    data-telephone="<?= htmlspecialchars($p['telephone']) ?>"
-                                    data-cin="<?= htmlspecialchars($p['CIN'] ?? '') ?>"
-                                    <?= $sel ?>>
-                                <?= htmlspecialchars($p['nom'] . ' ' . $p['prenom']) ?> (<?= $p['CIN'] ?: 'N/C' ?>)
-                            </option>
-                            <?php endwhile; ?>
-                        </select>
-                    </div>
+            <form method="POST" id="traitementForm" class="form-body">
+                
+                <div class="section-separator"><i class="fa-solid fa-hospital-user"></i> Identification Patient</div>
 
-                    <div id="patientInfo" class="patient-info-banner" style="<?= ($current_patient) ? 'display: grid;' : 'display: none;' ?>">
-                        <?php if($current_patient): ?>
-                            <div class="info-box"><span class="info-label">Patient</span><span class="info-value"><?= htmlspecialchars($current_patient['nom'].' '.$current_patient['prenom']) ?></span></div>
-                            <div class="info-box"><span class="info-label">Âge</span><span class="info-value"><?= $age_patient ?> ans</span></div>
-                            <div class="info-box"><span class="info-label">CIN</span><span class="info-value"><?= htmlspecialchars($current_patient['CIN']) ?></span></div>
-                        <?php endif; ?>
-                    </div>
-
-                    <div class="section-title">Détails du traitement</div>
-
-                    <div class="field-group">
-                        <label class="required">Date du traitement</label>
-                        <input type="date" name="date_traitement" id="date_traitement" class="form-control" value="<?= date('Y-m-d') ?>" required max="<?= date('Y-m-d') ?>">
-                    </div>
-
-                    <div class="field-group">
-                        <label>Médicament(s)</label>
-                        <input type="text" name="medicament" class="form-control" placeholder="Ex: Paracétamol 500mg">
-                    </div>
-
-                    <div class="field-group full-width">
-                        <label class="required">Diagnostic et Observations</label>
-                        <textarea name="description" id="description" class="form-control" rows="4" placeholder="Décrivez l'état du patient et le soin apporté..." required></textarea>
-                        <div style="text-align: right; font-size: 11px; color: var(--text-muted); font-weight: 700;">
-                            <span id="charCount">0</span> / 2000 caractères
+                <div class="row g-4">
+                    <div class="col-12">
+                        <label class="form-label">Sélectionner le patient</label>
+                        <div class="input-group-custom">
+                            <i class="fa-solid fa-search"></i>
+                            <select name="id_patient" id="id_patient" class="form-select-modern" required onchange="afficherInfosPatient(this.value)">
+                                <option value="">-- Choisir un patient --</option>
+                                <?php
+                                $stmt = $pdo->query("SELECT * FROM patients ORDER BY nom, prenom");
+                                while($p = $stmt->fetch()):
+                                    $sel = ($patient_id > 0 && $p['id_patient'] == $patient_id) ? 'selected' : '';
+                                ?>
+                                <option value="<?= $p['id_patient'] ?>" 
+                                        data-nom="<?= htmlspecialchars($p['nom']) ?>"
+                                        data-prenom="<?= htmlspecialchars($p['prenom']) ?>"
+                                        data-naissance="<?= $p['date_naissance'] ?>"
+                                        data-cin="<?= htmlspecialchars($p['CIN'] ?? '') ?>"
+                                        <?= $sel ?>>
+                                    <?= htmlspecialchars($p['nom'] . ' ' . $p['prenom']) ?> (<?= $p['CIN'] ?: 'N/C' ?>)
+                                </option>
+                                <?php endwhile; ?>
+                            </select>
                         </div>
                     </div>
 
-                    <div class="field-group full-width">
-                        <label>Instructions de suivi</label>
-                        <textarea name="suivi" class="form-control" rows="3" placeholder="Date de rappel, recommandations alimentaires, etc."></textarea>
+                    <div class="col-12">
+                        <div id="patientInfo" class="patient-quick-info" style="<?= ($current_patient) ? 'display: grid;' : 'display: none;' ?>">
+                            <?php if($current_patient): ?>
+                                <div class="info-item"><span class="label">Patient</span><span class="val"><?= htmlspecialchars($current_patient['nom'].' '.$current_patient['prenom']) ?></span></div>
+                                <div class="info-item"><span class="label">Âge</span><span class="val"><?= $age_patient ?> ans</span></div>
+                                <div class="info-item"><span class="label">CIN</span><span class="val"><?= htmlspecialchars($current_patient['CIN'] ?: 'N/C') ?></span></div>
+                            <?php endif; ?>
+                        </div>
                     </div>
-
                 </div>
 
-                <button type="submit" name="submit" class="btn-submit">
-                    <i class="fa-solid fa-floppy-disk"></i> Enregistrer le traitement
-                </button>
-                
-                <div style="text-align: center; margin-top: 15px;">
-                    <a href="list.php" style="text-decoration:none; color: var(--text-muted); font-size: 14px; font-weight: 700;">
-                        <i class="fa-solid fa-arrow-left"></i> Annuler et retourner
-                    </a>
+                <div class="section-separator"><i class="fa-solid fa- prescription"></i> Détails de la Prescription</div>
+
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <label class="form-label">Date du traitement</label>
+                        <div class="input-group-custom">
+                            <i class="fa-solid fa-calendar-check"></i>
+                            <input type="date" name="date_traitement" class="form-control-modern" value="<?= date('Y-m-d') ?>" required max="<?= date('Y-m-d') ?>">
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Médicament(s)</label>
+                        <div class="input-group-custom">
+                            <i class="fa-solid fa-pills"></i>
+                            <input type="text" name="medicament" class="form-control-modern" placeholder="Ex: Paracétamol 500mg, Amoxicilline...">
+                        </div>
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label">Diagnostic et Observations</label>
+                        <div class="input-group-custom">
+                            <i class="fa-solid fa-notes-medical"></i>
+                            <textarea name="description" id="description" class="form-control-modern" rows="4" placeholder="Décrivez l'état du patient et le soin apporté..." required></textarea>
+                        </div>
+                        <div class="char-counter"><span id="charCount">0</span> / 2000 caractères</div>
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label">Instructions de suivi</label>
+                        <div class="input-group-custom">
+                            <i class="fa-solid fa-comment-medical"></i>
+                            <textarea name="suivi" class="form-control-modern" rows="2" placeholder="Date de rappel, recommandations alimentaires, etc."></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-5">
+                    <button type="submit" name="submit" class="btn-submit-modern">
+                        <i class="fa-solid fa-floppy-disk"></i> Enregistrer le traitement
+                    </button>
+                    <div class="text-center mt-3">
+                        <a href="list.php" class="text-muted small text-decoration-none">
+                            <i class="fa-solid fa-arrow-left me-1"></i> Annuler et retourner
+                        </a>
+                    </div>
                 </div>
             </form>
         </div>
@@ -314,9 +347,9 @@ function afficherInfosPatient(patientId) {
         const age = new Date().getFullYear() - naissance.getFullYear();
         
         banner.innerHTML = `
-            <div class="info-box"><span class="info-label">Patient</span><span class="info-value">${opt.dataset.nom} ${opt.dataset.prenom}</span></div>
-            <div class="info-box"><span class="info-label">Âge</span><span class="info-value">${age} ans</span></div>
-            <div class="info-box"><span class="info-label">CIN</span><span class="info-value">${opt.dataset.cin || 'N/C'}</span></div>
+            <div class="info-item"><span class="label">Patient</span><span class="val">${opt.dataset.nom} ${opt.dataset.prenom}</span></div>
+            <div class="info-item"><span class="label">Âge</span><span class="val">${age} ans</span></div>
+            <div class="info-item"><span class="label">CIN</span><span class="val">${opt.dataset.cin || 'N/C'}</span></div>
         `;
         banner.style.display = 'grid';
     } else {

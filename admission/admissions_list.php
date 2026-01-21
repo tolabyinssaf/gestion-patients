@@ -2,7 +2,7 @@
 session_start();
 include "../config/connexion.php";
 
-// 1. Requête SQL avec GROUP BY et toutes les colonnes nécessaires (type_chambre incluse)
+// 1. Requête SQL
 $admissions = $pdo->query("
     SELECT a.*, 
            p.nom, p.prenom, p.date_naissance, p.sexe, p.telephone, p.adresse, p.email,
@@ -16,12 +16,12 @@ $admissions = $pdo->query("
     ORDER BY a.date_admission DESC
 ")->fetchAll(PDO::FETCH_ASSOC);
 
-// 2. Récupération des KPI
+// 2. KPI
 $kpiStmt = $pdo->query("SELECT * FROM vw_admission_kpi");
 $kpi = $kpiStmt ? $kpiStmt->fetch(PDO::FETCH_ASSOC) : ['total' => 0, 'en_cours' => 0, 'termine' => 0];
 $today = $pdo->query("SELECT COUNT(*) FROM admissions WHERE date_admission = CURDATE()")->fetchColumn();
 
-// 3. Infos Utilisateur connecté
+// 3. Infos Utilisateur
 if (!isset($_SESSION['id_user'])) { $_SESSION['id_user'] = 1; }
 $user_id = $_SESSION['user_id'] ?? $_SESSION['id_user'];
 $stmt_user = $pdo->prepare("SELECT nom, prenom FROM utilisateurs WHERE id_user = ?");
@@ -50,22 +50,16 @@ $services = ['Cardiologie', 'Pédiatrie', 'Chirurgie', 'Général'];
             --primary: #0f766e; 
             --primary-light: #f0fdfa;
             --sidebar-bg: #0f172a;
-            --bg-body: #f8fafc;
+            --bg-body: #f8fafc; /* Fond clair */
             --border: #e2e8f0;
             --white: #ffffff;
             --header-height: 75px;
             --sidebar-width: 260px;
         }
 
-        body.dark-mode {
-            --bg-body: #0f172a;
-            --white: #1e293b;
-            --border: #334155;
-            color: #f1f5f9;
-        }
-
+        /* Suppression du dark-mode pour garder la page CLAIRE */
         * { margin:0; padding:0; box-sizing:border-box; font-family: 'Inter', sans-serif; }
-        body { background: var(--bg-body); color: #1e293b; transition: 0.3s ease; }
+        body { background: var(--bg-body); color: #1e293b; }
 
         header {
             background: var(--white);
@@ -86,19 +80,20 @@ $services = ['Cardiologie', 'Pédiatrie', 'Chirurgie', 'Général'];
 
         .content { margin-left: var(--sidebar-width); margin-top: var(--header-height); padding: 40px; }
 
-        /* KPI Cards */
         .kpi-card { background: var(--white); border-radius: 18px; padding: 20px; border: 1px solid var(--border); display: flex; align-items: center; gap: 15px; }
         .kpi-icon { width: 50px; height: 50px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 24px; }
 
         .glass-card { background: var(--white); border-radius: 20px; border: 1px solid var(--border); padding: 25px; margin-bottom: 30px; }
 
-        /* Table */
         .table thead th { border: none; color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; padding: 15px 20px; }
         .table tbody tr { background: var(--white); transition: 0.2s; cursor: pointer; border-bottom: 1px solid var(--border); }
         .table tbody tr:hover { background: #f1f5f9; }
         .table tbody td { padding: 18px 20px; vertical-align: middle; }
 
-        /* MODAL DEVELOPPÉ */
+        /* BOUTON JAUNE CLAIR SUR MESURE */
+        .btn-yellow-light { background-color: #fef9c3 !important; border: 1px solid #fde047 !important; color: #854d0e !important; }
+        .btn-yellow-light:hover { background-color: #fde047 !important; }
+
         .modal-header { background: linear-gradient(135deg, var(--primary), #14b8a6); color: white; border-radius: 20px 20px 0 0; padding: 25px; }
         .modal-content { border-radius: 20px; border: none; }
         .info-label { font-size: 11px; color: #94a3b8; font-weight: 700; text-transform: uppercase; margin-bottom: 3px; display: block; }
@@ -106,41 +101,34 @@ $services = ['Cardiologie', 'Pédiatrie', 'Chirurgie', 'Général'];
         .section-title { font-size: 14px; font-weight: 700; color: var(--primary); border-bottom: 2px solid #f1f5f9; padding-bottom: 8px; margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
         .detail-box { background: #f8fafc; border-radius: 12px; padding: 15px; border: 1px solid #eff6f5; height: 100%; }
         .motif-area { background: #fffbeb; border-left: 4px solid #ca9945ff; padding: 15px; border-radius: 8px; font-style: italic; color: #92400e; }
-        
-        .theme-switch { cursor: pointer; padding: 8px 16px; border-radius: 50px; background: var(--primary-light); border: 1px solid var(--primary); color: var(--primary); font-size: 13px; font-weight: 600; }
     </style>
 </head>
 <body>
 
 <header>
     <img src="../images/logo_app2.png" alt="Logo" style="height:45px;">
-    <div class="d-flex align-items-center gap-3">
-        <button id="themeToggle" class="theme-switch">🌙 Mode Sombre</button>
-        <div class="user-pill">
-            <i class="fa-solid fa-user-tie"></i>
-            <span>Séc. <?= htmlspecialchars($user_info['prenom'] ?? '') ?></span>
-        </div>
+    <div class="user-pill">
+        <i class="fa-solid fa-user-tie"></i>
+        <span>Séc. <?= htmlspecialchars($user_info['prenom'] ?? '') ?></span>
     </div>
 </header>
 
-    <aside class="sidebar">
-        <h3 style="color:rgba(255,255,255,0.3); font-size:11px; text-transform:uppercase; margin-bottom:20px; padding-left:12px;">Menu Gestion</h3>
-        <a href="../connexion_secretaire/dashboard_secretaire.php"><i class="fa-solid fa-chart-line"></i> Vue Générale</a>
-        <a href="../connexion_secretaire/patients_secr.php" ><i class="fa-solid fa-user-group"></i> Patients</a>
-         <a href="admissions_list.php" class="active"><i class="fa-solid fa-hospital-user"></i> Admissions</a>
-        <a href="../connexion_secretaire/suivis.php"><i class="fa-solid fa-calendar-check"></i> Suivis</a>
-        <a href="../connexion_secretaire/caisse.php"><i class="fa-solid fa-wallet"></i> Caisse & Factures</a>
-        <a href="archives_admissions.php"><i class="fa-solid fa-box-archive"></i> Archives</a>
-         <a href="../connexion_secretaire/profil_secretaire.php"><i class="fa-solid fa-user"></i> Profil</a>
-        <div style="height: 1px; background: rgba(255,255,255,0.1); margin: 20px 0;"></div>
-        <a href="../connexio_utilisateur/deconnexion.php" style="color: #fda4af;"><i class="fa-solid fa-power-off"></i> Déconnexion</a>
-    </aside>
+<aside class="sidebar">
+    <h3 style="color:rgba(255,255,255,0.3); font-size:11px; text-transform:uppercase; margin-bottom:20px; padding-left:12px;">Menu Gestion</h3>
+    <a href="../connexion_secretaire/dashboard_secretaire.php"><i class="fa-solid fa-chart-line"></i> Vue Générale</a>
+    <a href="../connexion_secretaire/patients_secr.php"><i class="fa-solid fa-user-group"></i> Patients</a>
+    <a href="admissions_list.php" class="active"><i class="fa-solid fa-hospital-user"></i> Admissions</a>
+    <a href="../connexion_secretaire/suivis.php"><i class="fa-solid fa-calendar-check"></i> Suivis</a>
+    <a href="../connexion_secretaire/caisse.php"><i class="fa-solid fa-wallet"></i> Caisse & Factures</a>
+    <a href="archives_admissions.php"><i class="fa-solid fa-box-archive"></i> Archives</a>
+    <a href="../connexion_secretaire/profil_secretaire.php"><i class="fa-solid fa-user"></i> Profil</a>
+    <div style="height: 1px; background: rgba(255,255,255,0.1); margin: 20px 0;"></div>
+    <a href="../connexio_utilisateur/deconnexion.php" style="color: #fda4af;"><i class="fa-solid fa-power-off"></i> Déconnexion</a>
+</aside>
 
 <main class="content">
     <div class="container-fluid">
-        
         <div class="d-flex justify-content-between align-items-center mb-4">
-          
             <a href="admission_form.php" class="btn" style="background: var(--primary); color: white; border-radius: 12px; padding: 10px 20px;">
                 <i class="bi bi-plus-circle me-2"></i>Nouvelle Admission
             </a>
@@ -155,7 +143,7 @@ $services = ['Cardiologie', 'Pédiatrie', 'Chirurgie', 'Général'];
             </div>
             <div class="col-md-3">
                 <div class="kpi-card shadow-sm">
-                    <div class="kpi-icon bg-warning text-white"><i class="bi bi-heart-pulse"></i></div>
+                    <div class="kpi-icon bg-dark text-white"><i class="bi bi-heart-pulse"></i></div>
                     <div><div class="small text-muted">En cours</div><div class="h4 fw-bold mb-0"><?= $kpi['en_cours'] ?></div></div>
                 </div>
             </div>
@@ -211,7 +199,8 @@ $services = ['Cardiologie', 'Pédiatrie', 'Chirurgie', 'Général'];
                 </thead>
                 <tbody>
                     <?php foreach($admissions as $adm): 
-                        $badgeClass = ($adm['statut'] == 'En cours') ? 'bg-warning text-dark' : 'bg-success text-white';
+                        // STATUT : Noir si en cours, vert si terminé
+                        $badgeClass = ($adm['statut'] == 'En cours') ? 'bg-dark text-white' : 'bg-success text-white';
                     ?>
                     <tr data-bs-toggle="modal" data-bs-target="#modal<?= $adm['id_admission'] ?>">
                         <td>
@@ -223,9 +212,13 @@ $services = ['Cardiologie', 'Pédiatrie', 'Chirurgie', 'Général'];
                         <td>Dr. <?= htmlspecialchars($adm['medecin_nom'] ?? '-') ?></td>
                         <td>N° <?= $adm['numero_chambre'] ?? '-' ?></td>
                         <td><span class="badge rounded-pill <?= $badgeClass ?>"><?= $adm['statut'] ?></span></td>
-                        <td class="text-end" >
-                            <a href="modifier_admission.php?id=<?= $adm['id_admission'] ?>" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
-                            <button onclick="deleteAdmission(<?= $adm['id_admission'] ?>)" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                        <td class="text-end" onclick="event.stopPropagation()">
+                            <a href="modifier_admission.php?id=<?= $adm['id_admission'] ?>" class="btn btn-sm btn-yellow-light">
+                                <i class="bi bi-pencil"></i>
+                            </a>
+                            <button onclick="deleteAdmission(<?= $adm['id_admission'] ?>)" class="btn btn-sm btn-success">
+                                <i class="bi bi-trash"></i>
+                            </button>
                         </td>
                     </tr>
                     <?php endforeach; ?>
@@ -249,84 +242,20 @@ $services = ['Cardiologie', 'Pédiatrie', 'Chirurgie', 'Général'];
                 </div>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-
             <div class="modal-body p-4">
                 <div class="section-title"><i class="bi bi-person-badge"></i> Informations du Patient</div>
                 <div class="row g-3 mb-4">
-                    <div class="col-md-4">
-                        <div class="detail-box">
-                            <span class="info-label">Nom Complet</span>
-                            <span class="info-value"><?= htmlspecialchars($adm['nom'].' '.$adm['prenom']) ?></span>
-                        </div>
-                    </div>
-                    <div class="col-md-2">
-                        <div class="detail-box">
-                            <span class="info-label">Sexe</span>
-                            <span class="info-value"><?= $adm['sexe'] ?></span>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="detail-box">
-                            <span class="info-label">Âge</span>
-                            <span class="info-value"><?= date_diff(date_create($adm['date_naissance']), date_create('today'))->y ?> ans</span>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="detail-box text-primary">
-                            <span class="info-label">Téléphone</span>
-                            <span class="info-value"><?= $adm['telephone'] ?></span>
-                        </div>
-                    </div>
-                    <div class="col-md-12">
-                        <div class="detail-box bg-white border-dashed">
-                            <span class="info-label">Adresse & Email</span>
-                            <span class="info-value small"><?= htmlspecialchars($adm['adresse']) ?> | <?= htmlspecialchars($adm['email'] ?? 'N/A') ?></span>
-                        </div>
-                    </div>
+                    <div class="col-md-4"><div class="detail-box"><span class="info-label">Nom Complet</span><span class="info-value"><?= htmlspecialchars($adm['nom'].' '.$adm['prenom']) ?></span></div></div>
+                    <div class="col-md-2"><div class="detail-box"><span class="info-label">Sexe</span><span class="info-value"><?= $adm['sexe'] ?></span></div></div>
+                    <div class="col-md-3"><div class="detail-box"><span class="info-label">Âge</span><span class="info-value"><?= date_diff(date_create($adm['date_naissance']), date_create('today'))->y ?> ans</span></div></div>
+                    <div class="col-md-3"><div class="detail-box text-primary"><span class="info-label">Téléphone</span><span class="info-value"><?= $adm['telephone'] ?></span></div></div>
                 </div>
-
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <div class="section-title"><i class="bi bi-hospital"></i> Détails Hospitalisation</div>
-                        <div class="row g-2">
-                            <div class="col-6">
-                                <span class="info-label">Service</span>
-                                <span class="info-value text-primary"><?= $adm['service'] ?></span>
-                            </div>
-                            <div class="col-6">
-                                <span class="info-label">Chambre (Type)</span>
-                                <span class="info-value"><?= $adm['numero_chambre'] ?> (<?= $adm['type_chambre'] ?? 'Standard' ?>)</span>
-                            </div>
-                            <div class="col-12 mt-2">
-                                <span class="info-label">Médecin Traitant</span>
-                                <span class="info-value">Dr. <?= $adm['medecin_nom'] ?? 'Non assigné' ?></span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-6 border-start ps-4">
-                        <div class="section-title"><i class="bi bi-shield-check"></i> Statut Administratif</div>
-                        <div class="mb-3">
-                            <span class="info-label">État</span>
-                            <span class="badge <?= $adm['statut'] == 'En cours' ? 'bg-dark text-dark' : 'bg-success text-white' ?> px-3 py-2">
-                                <?= $adm['statut'] ?>
-                            </span>
-                        </div>
-                        <span class="info-label">Contact d'urgence</span>
-                        <span class="info-value small">Utiliser le numéro du patient</span>
-                    </div>
-                </div>
-
                 <div class="mt-4">
-                    <div class="section-title"><i class="bi bi-chat-left-text"></i> Motif de l'admission</div>
-                    <div class="motif-area">
-                        <?= nl2br(htmlspecialchars($adm['motif'])) ?>
-                    </div>
+                    <div class="section-title"><i class="bi bi-chat-left-text"></i> Motif</div>
+                    <div class="motif-area"><?= nl2br(htmlspecialchars($adm['motif'])) ?></div>
                 </div>
             </div>
-
-            <div class="modal-footer bg-light px-4">
-                <button type="button" class="btn btn-secondary rounded-pill" data-bs-dismiss="modal">Fermer</button>
-            </div>
+            <div class="modal-footer bg-light"><button type="button" class="btn btn-secondary rounded-pill" data-bs-dismiss="modal">Fermer</button></div>
         </div>
     </div>
 </div>
@@ -342,18 +271,11 @@ $services = ['Cardiologie', 'Pédiatrie', 'Chirurgie', 'Général'];
 <script>
 $(document).ready(function () {
     flatpickr("#filterDate", { dateFormat: "Y-m-d" });
-
     var table = $('#admissionsTable').DataTable({
         language: { url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/fr-FR.json' },
         pageLength: 10,
-        dom: '<"d-flex justify-content-between align-items-center mb-3"f>rtip',
+        dom: '<"d-flex justify-content-between align-items-center mb-3"f>rtp',
     });
-
-    $('#filterStatus').on('change', function(){ table.column(5).search(this.value).draw(); });
-    $('#filterService').on('change', function(){ table.column(2).search(this.value).draw(); });
-    $('#filterDate').on('change', function(){ table.column(1).search(this.value).draw(); });
-
-
 });
 
 function deleteAdmission(id){

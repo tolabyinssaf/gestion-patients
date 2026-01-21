@@ -2,6 +2,7 @@
 session_start();
 include("../config/connexion.php");
 
+// 1. Vérification sécurité
 if (!isset($_SESSION['user_id']) || strtolower($_SESSION['role']) !== 'secretaire') {
     header("Location: login.php");
     exit;
@@ -28,7 +29,6 @@ if (!$medecin_info) {
 $message = "";
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-
     $nom = strtoupper($_POST['nom']);
     $prenom = ucfirst($_POST['prenom']);
     $cin = strtoupper($_POST['cin']);
@@ -40,8 +40,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     try {
         $pdo->beginTransaction();
-
-        // Vérifier doublon CIN
         $check = $pdo->prepare("SELECT id_patient FROM patients WHERE cin = ?");
         $check->execute([$cin]);
 
@@ -49,141 +47,167 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $message = "Ce numéro de CIN est déjà enregistré.";
             $pdo->rollBack();
         } else {
-
-            // ✅ INSERT PATIENT SEULEMENT
             $stmt = $pdo->prepare("
                 INSERT INTO patients 
                 (nom, prenom, cin, telephone, email, adresse, date_naissance, sexe, date_inscription)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
             ");
-
-            $stmt->execute([
-                $nom,
-                $prenom,
-                $cin,
-                $telephone,
-                $email,
-                $adresse,
-                $date_naissance,
-                $sexe
-            ]);
-
+            $stmt->execute([$nom, $prenom, $cin, $telephone, $email, $adresse, $date_naissance, $sexe]);
             $pdo->commit();
-
             header("Location: dashboard_secretaire.php?patient_added=1");
             exit;
         }
-
     } catch (Exception $e) {
-        if ($pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
+        if ($pdo->inTransaction()) { $pdo->rollBack(); }
         $message = "Erreur lors de l’enregistrement.";
     }
 }
 ?>
-
 
 <!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <title>MedCare | Admission Patient</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
             --primary: #0f766e; 
-            --primary-light: #f0fdfa;
-            --sidebar-bg: #0f172a;
-            --bg-body: #f8fafc;
-            --border: #e2e8f0;
+            --primary-hover: #0d9488;
+            --sidebar-bg: #0f172a; 
+            --input-dark: #1e293b; 
+            --bg-body: #f1f5f9;
             --white: #ffffff;
             --header-height: 75px;
             --sidebar-width: 260px;
         }
 
-        /* Conservation de votre police et base */
-        * { margin:0; padding:0; box-sizing:border-box; font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; }
+        * { margin:0; padding:0; box-sizing:border-box; font-family: 'Inter', sans-serif; }
         body { background: var(--bg-body); color: #1e293b; }
 
-        /* HEADER ET SIDEBAR INCHANGÉS (STRUCTURE) */
-        header {
-            background: var(--white); padding: 0 40px; height: var(--header-height);
-            display: flex; justify-content: space-between; align-items: center;
-            border-bottom: 1px solid var(--border); position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
-        }
-        .logo { height: 45px; }
-        .sidebar { 
-            width: var(--sidebar-width); background: var(--sidebar-bg); padding: 24px 16px; 
-            position: fixed; top: var(--header-height); left: 0; bottom: 0; z-index: 999;
-        }
-        .sidebar a { display: flex; align-items: center; gap: 12px; color: #94a3b8; text-decoration: none; padding: 12px 16px; border-radius: 10px; margin-bottom: 5px; }
+        header { background: var(--white); padding: 0 40px; height: var(--header-height); display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; position: fixed; top: 0; left: 0; right: 0; z-index: 1000; }
+        .sidebar { width: var(--sidebar-width); background: var(--sidebar-bg); padding: 24px 16px; position: fixed; top: var(--header-height); left: 0; bottom: 0; z-index: 999; }
+        .sidebar a { display: flex; align-items: center; gap: 12px; color: #94a3b8; text-decoration: none; padding: 12px 16px; border-radius: 10px; margin-bottom: 5px; transition: 0.3s; }
         .sidebar a.active { background: var(--primary); color: #fff; }
-        .content { margin-left: var(--sidebar-width); margin-top: var(--header-height); padding: 40px; }
-        .user-pill { background: var(--primary-light); padding: 8px 18px; border-radius: 12px; display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; color: var(--primary); }
+        .user-pill { background: #f0fdfa; padding: 8px 18px; border-radius: 12px; display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; color: var(--primary); }
+        .content { margin-left: var(--sidebar-width); padding: 30px 40px; margin-top: var(--header-height); }
 
-        /* --- AMÉLIORATION DU FORMULAIRE UNIQUEMENT --- */
-        .form-container { max-width: 850px; margin: auto; }
-        
-        .doctor-dest-card {
-            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-            color: white; padding: 14px; border-radius: 18px;
-            display: flex; align-items: center; gap: 20px;
-            margin-bottom: 30px; border: 1px solid rgba(255,255,255,0.1);
-        }
-        .doc-icon-circle {
-            width: 55px; height: 55px; background: var(--primary);
-            border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 22px;
-            box-shadow: 0 8px 15px rgba(15, 118, 110, 0.3);
+        .form-card {
+            background: var(--white);
+            border-radius: 24px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 15px 35px -5px rgba(0, 0, 0, 0.07);
+            max-width: 900px;
+            margin: 0 auto;
+            overflow: hidden;
         }
 
-        .form-card { 
-            background: white; padding: 40px; border-radius: 24px; 
-            border: 1px solid var(--border);
-            box-shadow: 0 10px 30px rgba(0,0,0,0.02);
+        /* En-tête Médical Agrandie */
+        .form-header-profile {
+            padding: 40px;
+            background: var(--primary);
+            display: flex; 
+            align-items: center; 
+            gap: 25px;
+            color: white;
+            border-bottom: 4px solid rgba(0,0,0,0.1);
         }
 
-        .section-header {
-            display: flex; align-items: center; gap: 10px;
-            margin-bottom: 25px; padding-bottom: 12px;
-            border-bottom: 2px solid #f8fafc;
-            color: #0f172a; font-weight: 700;
+        .avatar-huge {
+            width: 90px; height: 90px; 
+            background: rgba(255,255,255,0.15); 
+            border-radius: 22px; 
+            display: flex; align-items: center; justify-content: center;
+            font-size: 40px; 
+            border: 2px solid rgba(255,255,255,0.4);
+            box-shadow: 0 8px 15px rgba(0,0,0,0.1);
         }
-        
-        .input-group-text { 
-            background: #f8fafc; border-color: #e2e8f0; color: #94a3b8;
-            padding-left: 15px; border-radius: 12px 0 0 12px !important;
-        }
-        .form-control, .form-select { 
-            border-color: #e2e8f0; padding: 12px 15px; font-size: 15px;
-            border-radius: 0 12px 12px 0 !important;
-            transition: all 0.2s ease;
-        }
-        .form-control:focus, .form-select:focus { 
-            border-color: var(--primary); box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.1);
-            background-color: #fff;
-        }
-        
-        label { font-weight: 600; color: #64748b; font-size: 13px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;}
 
-        .btn-save { 
-           background: linear-gradient(135deg, #1e293b 0%, #0f766e 100%); color: white; border: none; padding: 16px; 
-            border-radius: 14px; font-weight: 700; width: 100%; transition: 0.3s;
-            text-transform: uppercase; letter-spacing: 1px; font-size: 16px;
-            box-shadow: 0 10px 20px rgba(15, 118, 110, 0.2);
+        .medecin-title {
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            font-weight: 600;
+            opacity: 0.85;
+            margin-bottom: 4px;
         }
-        .btn-save:hover {            background: linear-gradient(135deg, #0f766e 0%, #1e293b 100%); transform: translateY(-2px); box-shadow: 0 15px 25px rgba(15, 118, 110, 0.3); }
-        
+
+        .medecin-name {
+            font-size: 26px;
+            font-weight: 800;
+            margin-bottom: 6px;
+            letter-spacing: -0.5px;
+        }
+
+        .medecin-spec {
+            display: inline-flex;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 6px 16px;
+            border-radius: 30px;
+            font-size: 14px;
+            font-weight: 500;
+            backdrop-filter: blur(4px);
+        }
+
+        .form-body { padding: 40px; }
+
+        .section-separator {
+            display: flex; align-items: center; margin: 30px 0 20px 0;
+            color: var(--primary); font-weight: 700; font-size: 13px;
+            text-transform: uppercase; letter-spacing: 1px;
+        }
+        .section-separator i { margin-right: 12px; }
+        .section-separator::after { content: ""; flex: 1; height: 1px; background: #e2e8f0; margin-left: 15px; }
+
+        .form-label { font-weight: 600; font-size: 13px; color: #64748b; margin-bottom: 8px; display: block; }
+        .input-group-custom { position: relative; }
+        .input-group-custom i { position: absolute; left: 18px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 15px; }
+
+        .form-control-modern {
+            width: 100%;
+            padding: 13px 15px 13px 50px;
+            background: var(--input-dark);
+            border: 1px solid var(--input-dark);
+            border-radius: 12px;
+            color: #ffffff;
+            font-size: 14px;
+            transition: 0.3s;
+        }
+        .form-control-modern:focus {
+            outline: none;
+            background: #334155;
+            box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.2);
+        }
+
+        .form-select-modern {
+            padding: 13px 15px;
+            background: var(--input-dark);
+            border: 1px solid var(--input-dark);
+            border-radius: 12px;
+            width: 100%;
+            color: #ffffff;
+            font-size: 14px;
+        }
+
+        .btn-update {
+            background: var(--primary); color: white; padding: 18px 35px;
+            border-radius: 14px; font-weight: 700; border: none; transition: 0.3s;
+            display: flex; align-items: center; gap: 12px; width: 100%; justify-content: center;
+            text-transform: uppercase; letter-spacing: 1px; font-size: 15px;
+        }
+        .btn-update:hover { background: var(--primary-hover); transform: translateY(-2px); box-shadow: 0 10px 20px rgba(15, 118, 110, 0.3); }
     </style>
 </head>
 <body>
 
 <header>
-    <img src="../images/logo_app2.png" alt="Logo" class="logo">
+    <img src="../images/logo_app2.png" alt="Logo" style="height: 45px;">
     <div class="user-pill">
-        <i class="fa-solid fa-circle-user"></i>
+        <i class="fa-solid fa-circle-user fa-lg"></i>
         <span>Séc. <?= htmlspecialchars($user['prenom']." ".$user['nom']) ?></span>
     </div>
 </header>
@@ -193,127 +217,106 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <h3 style="color:rgba(255,255,255,0.3); font-size:11px; text-transform:uppercase; margin-bottom:20px; padding-left:12px;">Menu Gestion</h3>
         <a href="dashboard_secretaire.php"><i class="fa-solid fa-chart-line"></i> Vue Générale</a>
         <a href="patients_secr.php" class="active"><i class="fa-solid fa-user-group"></i> Patients</a>
-         <a href="../admission/admissions_list.php"><i class="fa-solid fa-hospital-user"></i> Admissions</a>
+        <a href="../admission/admissions_list.php"><i class="fa-solid fa-hospital-user"></i> Admissions</a>
         <a href="suivis.php"><i class="fa-solid fa-calendar-check"></i> Suivis</a>
         <a href="caisse.php"><i class="fa-solid fa-wallet"></i> Caisse & Factures</a>
-         <a href="profil_secretaire.php"><i class="fa-solid fa-user"></i> Profil</a>
+        <a href="profil_secretaire.php"><i class="fa-solid fa-user"></i> Profil</a>
         <div style="height: 1px; background: rgba(255,255,255,0.1); margin: 20px 0;"></div>
         <a href="../connexio_utilisateur/deconnexion.php" style="color: #fda4af;"><i class="fa-solid fa-power-off"></i> Déconnexion</a>
     </aside>
 
     <main class="content">
-        <div class="form-container">
-            <div class="mb-4 d-flex justify-content-between align-items-center">
-                <div>
-                    <a href="dashboard_secretaire.php" class="text-decoration-none text-muted small fw-bold"><i class="fa-solid fa-arrow-left me-1"></i> ANNULER</a>
-                   
-                </div>
-                <div class="text-end">
-                    <span class="badge bg-white text-success border border-success-subtle rounded-pill px-3 py-2">Patient #ID-NEW</span>
-                </div>
-            </div>
-
-            <div class="doctor-dest-card">
-                <div class="doc-icon-circle">
+        <div class="form-card">
+            <div class="form-header-profile">
+                <div class="avatar-huge">
                     <i class="fa-solid fa-user-doctor"></i>
                 </div>
                 <div>
-                    <p class="mb-0 small opacity-50 text-uppercase fw-bold" style="font-size: 10px; letter-spacing: 1px;">Médecin Traitant</p>
-                    <h5 class="mb-0 fw-bold">Dr. <?= htmlspecialchars($medecin_info['nom']." ".$medecin_info['prenom']) ?></h5>
-                    <span class="small" style="color: #2dd4bf;"><i class="fa-solid fa-tags me-1"></i> <?= htmlspecialchars($medecin_info['specialite']) ?></span>
-                </div>
-                <div class="ms-auto d-none d-sm-block">
-                    <i class="fa-solid fa-shield-heart fa-2x opacity-25"></i>
+                    <div class="medecin-title">Médecin Destinataire</div>
+                    <div class="medecin-name">Dr. <?= htmlspecialchars($medecin_info['prenom']." ".$medecin_info['nom']) ?></div>
+                    <div class="medecin-spec">
+                        <i class="fa-solid fa-stethoscope me-2"></i>
+                        <?= htmlspecialchars($medecin_info['specialite']) ?>
+                    </div>
                 </div>
             </div>
 
             <?php if($message): ?>
-                <div class="alert alert-danger border-0 shadow-sm rounded-4 mb-4 d-flex align-items-center">
-                    <i class="fa-solid fa-circle-exclamation fs-4 me-3"></i> <?= $message ?>
-                </div>
+                <div class="alert alert-danger mx-4 mt-4 mb-0 border-0 shadow-sm"><?= $message ?></div>
             <?php endif; ?>
 
-            <div class="form-card">
-                <form action="" method="POST">
-                    <div class="section-header">
-                        <i class="fa-solid fa-address-card text-primary"></i> Dossier Patient
-                    </div>
-                    
-                    <div class="row g-4">
-                        <div class="col-md-6">
-                            <label>Nom</label>
-                            <div class="input-group">
-                                <span class="input-group-text"><i class="fa-solid fa-user"></i></span>
-                                <input type="text" name="nom" class="form-control" required placeholder="Ex: ALAOUI">
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <label>Prénom</label>
-                            <div class="input-group">
-                                <span class="input-group-text"><i class="fa-solid fa-user"></i></span>
-                                <input type="text" name="prenom" class="form-control" required placeholder="Ex: Ahmed">
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <label>N° CIN</label>
-                            <div class="input-group">
-                                <span class="input-group-text"><i class="fa-solid fa-id-badge"></i></span>
-                                <input type="text" name="cin" class="form-control" required placeholder="AB123456">
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-    <label>Adresse Email</label>
-    <div class="input-group">
-        <span class="input-group-text"><i class="fa-solid fa-envelope"></i></span>
-        <input type="email" name="email" class="form-control" placeholder="exemple@mail.com">
-    </div>
-</div>
+            <form action="" method="POST" class="form-body">
+                <div class="section-separator"><i class="fa-solid fa-user-tag"></i> Informations Civiles</div>
 
-<div class="col-md-6">
-    <label>Téléphone Mobile</label>
-    <div class="input-group">
-        <span class="input-group-text"><i class="fa-solid fa-mobile-screen"></i></span>
-        <input type="text" name="telephone" class="form-control" required placeholder="06 00 00 00 00">
-    </div>
-</div>
-
-<div class="col-12">
-    <label>Adresse Résidentielle</label>
-    <div class="input-group">
-        <span class="input-group-text"><i class="fa-solid fa-location-dot"></i></span>
-        <input type="text" name="adresse" class="form-control" placeholder="N° Rue, Quartier, Ville">
-    </div>
-</div>
-                        <div class="col-md-6">
-                            <label>Date de Naissance</label>
-                            <div class="input-group">
-                                <span class="input-group-text"><i class="fa-solid fa-calendar-day"></i></span>
-                                <input type="date" name="date_naissance" class="form-control" required>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <label>Sexe</label>
-                            <div class="input-group">
-                                <span class="input-group-text"><i class="fa-solid fa-venus-mars"></i></span>
-                                <select name="sexe" class="form-select" required>
-                                    <option value="" selected disabled>Choisir...</option>
-                                    <option value="M">Masculin</option>
-                                    <option value="F">Féminin</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <div class="col-12 mt-5">
-                            <button type="submit" class="btn-save">
-                                <i class="fa-solid fa-folder-plus me-2"></i> Enregistrer
-                            </button>
-                            <div class="text-center mt-3">
-                                <small class="text-muted"><i class="fa-solid fa-lock me-1"></i> Connexion sécurisée SSL - Certifié MedCare</small>
-                            </div>
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <label class="form-label">Nom de famille</label>
+                        <div class="input-group-custom">
+                            <i class="fa-solid fa-signature"></i>
+                            <input type="text" name="nom" class="form-control-modern" placeholder="NOM" required>
                         </div>
                     </div>
-                </form>
-            </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Prénom</label>
+                        <div class="input-group-custom">
+                            <i class="fa-solid fa-user-pen"></i>
+                            <input type="text" name="prenom" class="form-control-modern" placeholder="Prénom" required>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Numéro CIN</label>
+                        <div class="input-group-custom">
+                            <i class="fa-solid fa-address-card"></i>
+                            <input type="text" name="cin" class="form-control-modern" placeholder="Numéro CIN" required>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Date de Naissance</label>
+                        <div class="input-group-custom">
+                            <i class="fa-solid fa-calendar-day"></i>
+                            <input type="date" name="date_naissance" class="form-control-modern" required>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section-separator"><i class="fa-solid fa-map-location-dot"></i> Contact & Localisation</div>
+
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <label class="form-label">Téléphone</label>
+                        <div class="input-group-custom">
+                            <i class="fa-solid fa-phone"></i>
+                            <input type="tel" name="telephone" class="form-control-modern" placeholder="06..." required>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Genre</label>
+                        <select name="sexe" class="form-select-modern" required>
+                            <option value="" disabled selected>Choisir...</option>
+                            <option value="M">Masculin</option>
+                            <option value="F">Féminin</option>
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Adresse de résidence</label>
+                        <div class="input-group-custom">
+                            <i class="fa-solid fa-house-medical" style="top: 20px;"></i>
+                            <textarea name="adresse" class="form-control-modern" rows="2" placeholder="Adresse complète..."></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-5">
+                    <button type="submit" class="btn-update">
+                        <i class="fa-solid fa-folder-plus"></i> Créer et envoyer au médecin
+                    </button>
+                    <div class="text-center mt-3">
+                        <a href="dashboard_secretaire.php" class="text-muted small text-decoration-none">
+                            <i class="fa-solid fa-arrow-left me-1"></i> Annuler l'opération
+                        </a>
+                    </div>
+                </div>
+            </form>
         </div>
     </main>
 </div>

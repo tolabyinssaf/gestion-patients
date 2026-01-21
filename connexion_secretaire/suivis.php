@@ -2,11 +2,11 @@
 session_start();
 include("../config/connexion.php");
 
+// --- LOGIQUE SECRETAIRE CONSERVÉE ---
 if (!isset($_SESSION['user_id']) || strtolower($_SESSION['role']) !== 'secretaire') {
     header("Location: ../login.php"); exit;
 }
 
-// 1. RÉCUPÉRATION DES FILTRES
 $selected_date = isset($_GET['date']) ? $_GET['date'] : date('Y-m-d');
 
 if (isset($_GET['medecin_id'])) {
@@ -19,19 +19,12 @@ $stmt_u = $pdo->prepare("SELECT nom, prenom FROM utilisateurs WHERE id_user = ?"
 $stmt_u->execute([$user_id]);
 $user_info = $stmt_u->fetch();
 
-// 2. LISTE DES MÉDECINS
 $medecins_list = $pdo->query("SELECT id_user, nom, prenom, specialite FROM utilisateurs WHERE LOWER(role) = 'medecin' ORDER BY nom ASC")->fetchAll();
 
-// 3. REQUÊTE SQL
 $sql = "SELECT 
-            s.id_suivi, 
-            s.date_suivi, 
-            s.commentaire, 
-            s.status,
-            s.id_patient,
-            p.nom AS pat_nom, 
-            p.prenom AS pat_prenom, 
-            u.nom AS med_nom 
+            s.id_suivi, s.date_suivi, s.commentaire, s.status, s.id_patient,
+            p.nom AS pat_nom, p.prenom AS pat_prenom, 
+            u.nom AS med_nom, u.prenom AS med_prenom
         FROM suivis s
         JOIN patients p ON s.id_patient = p.id_patient
         JOIN utilisateurs u ON s.id_medecin = u.id_user
@@ -55,91 +48,109 @@ $suivis = $stmt->fetchAll(PDO::FETCH_ASSOC);
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>MedCare | Suivis</title>
+    <title>MedCare | Journal des Suivis</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
     <style>
         :root {
-            --primary: #0d9488; /* Le vert du menu */
+            --primary: #0d9488; /* Teal un peu plus vif */
             --primary-light: #f0fdfa;
-            --primary-soft: rgba(13, 148, 136, 0.08);
-            --secondary: #6366f1;
-            /* Fond de page : Dégradé vert menthe très très clair */
-            --bg-body: radial-gradient(circle at center, #f0fdfa 0%, #f8fafc 100%);
-            --sidebar-bg: #0f172a;
+            --primary-hover: #0f766e;
+            --sidebar-bg: #0f172a; /* Bleu ardoise plus doux que le noir pur */
+            --bg-body: #f1f5f9; /* Fond légèrement bleuté clair */
+            --text-main: #0f172a;
+            --text-muted: #121315;
             --white: #ffffff;
             --border: #e2e8f0;
-            --text-main: #334155;
-            --header-height: 75px;
-            --sidebar-width: 260px;
-            /* Box Shadow teinté en VERT */
-            --card-shadow: 0 10px 25px -5px rgba(13, 148, 136, 0.15), 0 8px 10px -6px rgba(13, 148, 136, 0.1);
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
         }
 
         * { margin:0; padding:0; box-sizing:border-box; font-family: 'Inter', sans-serif; }
-        body { background: var(--bg-body); color: var(--text-main); min-height: 100vh; }
+        body { background: var(--bg-body); color: var(--text-main); }
 
         header {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            padding: 0 40px; height: var(--header-height);
+            background: var(--white);
+            padding: 0 40px; height: 75px;
             display: flex; justify-content: space-between; align-items: center;
             border-bottom: 1px solid var(--border);
             position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        }
+        .user-pill {
+            background: var(--primary-light); padding: 8px 18px; border-radius: 12px;
+            display: flex; align-items: center; gap: 10px;
+            font-size: 14px; font-weight: 600; color: var(--primary);
+            border: 1px solid rgba(13, 148, 136, 0.2);
         }
 
         .sidebar { 
-            width: var(--sidebar-width); background: var(--sidebar-bg); 
-            padding: 24px 16px; position: fixed; top: var(--header-height); left: 0; bottom: 0; z-index: 999;
+            width: 260px; background: var(--sidebar-bg); padding: 24px 16px; 
+            position: fixed; top: 75px; left: 0; bottom: 0; z-index: 900;
         }
-        .sidebar a { 
-            display: flex; align-items: center; gap: 12px; color: #94a3b8; 
-            text-decoration: none; padding: 12px 16px; border-radius: 10px; transition: 0.2s; margin-bottom: 5px;
+        .sidebar h3 { color: rgba(255,255,255,0.4); font-size: 11px; text-transform: uppercase; margin-bottom: 20px; padding-left: 12px; }
+        .sidebar a {
+            display: flex; align-items: center; gap: 12px; color: #cbd5e1; text-decoration: none;
+            padding: 12px 16px; border-radius: 10px; margin-bottom: 5px; transition: 0.2s;
         }
-        .sidebar a.active { background: var(--primary); color: white; box-shadow: 0 4px 15px rgba(13, 148, 136, 0.4); }
-        .sidebar a:hover:not(.active) { background: rgba(255,255,255,0.05); color: white; }
+        .sidebar a:hover { background: rgba(255,255,255,0.1); color: #fff; }
+        .sidebar a.active { background: var(--primary); color: #fff; box-shadow: 0 4px 12px rgba(13, 148, 136, 0.3); }
 
-        .content { margin-left: var(--sidebar-width); margin-top: var(--header-height); padding: 40px; }
-
-        /* CARTES AVEC OMBRE VERTE */
-        .search-wrapper {
-            background: var(--white); padding: 25px; border-radius: 16px;
-            border: 1px solid rgba(13, 148, 136, 0.1); 
-            box-shadow: var(--card-shadow); 
-            margin-bottom: 30px;
-        }
-
-        .section-box { 
-            background: var(--white); padding: 25px; border-radius: 16px; 
-            border: 1px solid var(--border); 
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
-        }
-
-        .user-pill { background: var(--primary-light); color: var(--primary); border: 1px solid #ccfbf1; padding: 8px 16px; border-radius: 10px; font-weight: 600; }
-
-        /* TABLE */
-        table { width: 100%; border-collapse: separate; border-spacing: 0; }
-        th { color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; padding: 15px 12px; border-bottom: 2px solid #f1f5f9; }
-        td { padding: 15px 12px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
-        tr:hover td { background-color: var(--primary-light); } /* Hover Vert très clair */
-
-        /* BADGES */
-        .status-badge { padding: 6px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; display: inline-block; }
-        .status-encours { background: #fffbeb; color: #92400e; border: 1px solid #fef3c7; }
-        .status-termine { background: #f0fdf4; color: #166534; border: 1px solid #dcfce7; }
-
-        .btn-action { background: #ffffff; border: 1px solid var(--border); color: var(--primary); border-radius: 8px; width: 35px; height: 35px; display: inline-flex; align-items: center; justify-content: center; transition: 0.3s; }
-        .btn-action:hover { background: var(--primary); color: white; transform: translateY(-2px); box-shadow: 0 4px 8px rgba(13, 148, 136, 0.2); }
+        .content { flex: 1; padding: 40px; margin-left: 260px; margin-top: 75px; }
         
-        .form-control, .form-select {
-            border-radius: 10px; border: 1px solid #e2e8f0; padding: 10px 15px;
+        .page-header { 
+            margin-bottom: 35px; padding-bottom: 20px; border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; gap: 20px;
         }
-        .form-control:focus, .form-select:focus {
-            border-color: var(--primary); box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.1);
+        .page-icon {
+            width: 60px; height: 60px; background: var(--primary); color: white;
+            border-radius: 16px; display: flex; align-items: center; justify-content: center;
+            font-size: 24px; box-shadow: 0 10px 15px -3px rgba(13, 148, 136, 0.3);
         }
+
+        .search-wrapper {
+            background: var(--white); padding: 20px; border-radius: 16px;
+            border: 1px solid var(--border); margin-bottom: 30px;
+            box-shadow: var(--shadow);
+        }
+
+        .suivi-card {
+            background: var(--white); border-radius: 16px; border: 1px solid var(--border);
+            padding: 25px; margin-bottom: 20px; display: flex; gap: 25px;
+            transition: transform 0.2s ease;
+            box-shadow: var(--shadow);
+        }
+        .suivi-card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
+
+        .suivi-date-box {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            background: #f8fafc; min-width: 90px; height: 90px; border-radius: 12px;
+            border: 1px solid var(--border);
+        }
+        .suivi-date-box .day { font-size: 26px; font-weight: 800; color: var(--primary); line-height: 1; }
+        .suivi-date-box .month { font-size: 12px; text-transform: uppercase; font-weight: 700; color: var(--text-muted); margin-top: 4px; }
+
+        .commentaire-text {
+            color: var(--text-main); font-size: 14px; background: #fdfdfd;
+            padding: 15px; border-radius: 12px; margin: 12px 0; border: 1px solid #f1f5f9; border-left: 5px solid var(--primary);
+        }
+
+        .badge-status { font-size: 11px; padding: 6px 14px; border-radius: 50px; font-weight: 700; text-transform: uppercase; }
+        .status-termine { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+        .status-encours { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
+
+        .btn-action {
+            padding: 8px 16px; border-radius: 10px; text-decoration: none; font-size: 13px; font-weight: 600;
+            display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--border);
+            background: var(--white); color: var(--text-main); transition: 0.2s;
+        }
+        .btn-action:hover { background: var(--primary-light); border-color: var(--primary); color: var(--primary); }
+        .btn-folder { background: var(--primary); color: white; border: none; box-shadow: 0 4px 6px rgba(13, 148, 136, 0.2); }
+        .btn-folder:hover { background: var(--primary-hover); color: white; }
+
+        @media(max-width:900px){ .sidebar { display:none; } .content { margin-left: 0; } }
     </style>
 </head>
 <body>
@@ -147,45 +158,43 @@ $suivis = $stmt->fetchAll(PDO::FETCH_ASSOC);
 <header>
     <img src="../images/logo_app2.png" alt="Logo" style="height: 45px;">
     <div class="user-pill">
-        <i class="fa-solid fa-circle-user me-2"></i>
+        <i class="fa-solid fa-circle-user"></i>
         <span>Séc. <?= htmlspecialchars($user_info['prenom']." ".$user_info['nom']) ?></span>
     </div>
 </header>
 
-<div class="wrapper">
+<div class="d-flex">
     <aside class="sidebar">
-        <h3 style="color:rgba(255,255,255,0.3); font-size:11px; text-transform:uppercase; margin-bottom:20px; padding-left:12px;">Menu Gestion</h3>
+        <h3>Menu Gestion</h3>
         <a href="dashboard_secretaire.php"><i class="fa-solid fa-chart-line"></i> Vue Générale</a>
-        <a href="patients_secr.php" ><i class="fa-solid fa-user-group"></i> Patients</a>
-         <a href="../admission/admissions_list.php"><i class="fa-solid fa-hospital-user"></i> Admissions</a>
+        <a href="patients_secr.php"><i class="fa-solid fa-user-group"></i> Patients</a>
+        <a href="../admission/admissions_list.php"><i class="fa-solid fa-hospital-user"></i> Admissions</a>
         <a href="suivis.php" class="active"><i class="fa-solid fa-calendar-check"></i> Suivis</a>
         <a href="caisse.php"><i class="fa-solid fa-wallet"></i> Caisse & Factures</a>
-         <a href="profil_secretaire.php"><i class="fa-solid fa-user"></i> Profil</a>
+        <a href="profil_secretaire.php"><i class="fa-solid fa-user"></i> Profil</a>
         <div style="height: 1px; background: rgba(255,255,255,0.1); margin: 20px 0;"></div>
         <a href="../connexio_utilisateur/deconnexion.php" style="color: #fda4af;"><i class="fa-solid fa-power-off"></i> Déconnexion</a>
     </aside>
 
     <main class="content">
-        <div class="d-flex justify-content-between align-items-center mb-4">
+        <div class="page-header">
+            <div class="page-icon"><i class="fa-solid fa-clipboard-list"></i></div>
             <div>
-                <h1 class="h3 fw-bold mb-1" style="color: #0f172a;">Suivis Patients</h1>
-                <p class="text-muted small">Consultations pour le <span class="fw-bold text-dark"><?= date('d M Y', strtotime($selected_date)) ?></span></p>
+                
+                <h3 class="subtitle fw-bold" style="color: var(--text-muted);">Journal des Suivis </strong></h3>
             </div>
-            <a href="suivis.php?date=<?= date('Y-m-d') ?>" class="btn btn-sm btn-white border shadow-sm rounded-pill px-3 fw-bold" style="background:white; color: var(--primary);">
-                <i class="fa-solid fa-calendar-day me-1"></i> Aujourd'hui
-            </a>
         </div>
 
         <div class="search-wrapper">
-            <form method="GET" class="row g-3">
-                <div class="col-md-4">
-                    <label class="form-label small fw-bold text-muted">DATE DE CONSULTATION</label>
+            <form method="GET" class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold text-muted">DATE</label>
                     <input type="date" name="date" class="form-control" value="<?= $selected_date ?>" onchange="this.form.submit()">
                 </div>
-                <div class="col-md-6">
-                    <label class="form-label small fw-bold text-muted">FILTRER PAR MÉDECIN</label>
+                <div class="col-md-5">
+                    <label class="form-label small fw-bold text-muted">MÉDECIN</label>
                     <select name="medecin_id" class="form-select" onchange="this.form.submit()">
-                        <option value="">Tous les médecins de la clinique</option>
+                        <option value="">Tous les médecins</option>
                         <?php foreach($medecins_list as $m): ?>
                             <option value="<?= $m['id_user'] ?>" <?= $filter_medecin == $m['id_user'] ? 'selected' : '' ?>>
                                 Dr. <?= htmlspecialchars($m['nom']." ".$m['prenom']) ?>
@@ -193,63 +202,61 @@ $suivis = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <?php endforeach; ?>
                     </select>
                 </div>
+                <div class="col-md-2">
+                    <a href="suivis.php?date=<?= date('Y-m-d') ?>" class="btn btn-outline-secondary w-100" style="border-radius: 10px; font-weight: 500;">Aujourd'hui</a>
+                </div>
             </form>
         </div>
 
-        <div class="section-box">
-            <div class="table-responsive">
-                <table>
-                    <thead>
-                        <tr>
-                            <th class="ps-3">Heure</th>
-                            <th>Patient</th>
-                            <th>Médecin</th>
-                            <th>Commentaire</th>
-                            <th>Statut</th>
-                            <th class="text-end pe-3">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php if(!empty($suivis)): ?>
-                            <?php foreach($suivis as $s): ?>
-                            <tr>
-                                <td class="ps-3 fw-bold" style="color: var(--primary);"><?= date('H:i', strtotime($s['date_suivi'])) ?></td>
-                                <td>
-                                    <div class="fw-bold text-dark"><?= strtoupper($s['pat_nom']) ?> <?= $s['pat_prenom'] ?></div>
-                                </td>
-                                <td>
-                                    <div class="small fw-medium"><i class="fa-solid fa-stethoscope me-1 text-primary"></i> Dr. <?= $s['med_nom'] ?></div>
-                                </td>
-                                <td>
-                                    <span class="text-muted small"><?= htmlspecialchars($s['commentaire'] ?: '---') ?></span>
-                                </td>
-                                <td>
-                                    <span class="status-badge <?= strtolower($s['status']) == 'terminé' ? 'status-termine' : 'status-encours' ?>">
-                                        <?= $s['status'] ?: 'En attente' ?>
-                                    </span>
-                                </td>
-                                <td class="text-end pe-3">
-                                    <a href="dossier_patient.php?id=<?= $s['id_patient'] ?>" class="btn-action">
-                                        <i class="fa-solid fa-eye"></i>
-                                    </a>
-                                </td>
-                            </tr>
-                            <?php endforeach; ?>
-                        <?php else: ?>
-                            <tr>
-                                <td colspan="6" class="text-center py-5">
-                                    <div class="text-muted opacity-50">
-                                        <i class="fa-regular fa-calendar-xmark fa-3x mb-3"></i>
-                                        <p>Aucun suivi pour ce jour.</p>
-                                    </div>
-                                </td>
-                            </tr>
-                        <?php endif; ?>
-                    </tbody>
-                </table>
-            </div>
+        <div class="timeline-container">
+            <?php if(!empty($suivis)): ?>
+                <?php foreach($suivis as $s): ?>
+                <div class="suivi-card">
+                    <div class="suivi-date-box">
+                        <span class="day"><?= date('d', strtotime($s['date_suivi'])) ?></span>
+                        <span class="month"><?= date('M', strtotime($s['date_suivi'])) ?></span>
+                    </div>
+
+                    <div class="flex-grow-1">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <h4 class="mb-0 fw-bold" style="font-size: 19px; color: #1e293b;">
+                                    <?= strtoupper($s['pat_nom']) ?> <?= $s['pat_prenom'] ?>
+                                </h4>
+                                <span class="text-muted small">
+                                    <i class="fa-solid fa-user-doctor me-1" style="color: var(--primary);"></i> Dr. <?= $s['med_nom'] ?>
+                                    | <i class="fa-regular fa-clock ms-1"></i> <?= date('H:i', strtotime($s['date_suivi'])) ?>
+                                </span>
+                            </div>
+                            <span class="badge-status <?= strtolower($s['status']) == 'terminé' ? 'status-termine' : 'status-encours' ?>">
+                                <?= $s['status'] ?: 'En attente' ?>
+                            </span>
+                        </div>
+
+                        <div class="commentaire-text">
+                            <strong><i class="fa-solid fa-comment-medical me-2"></i>Note :</strong><br>
+                            <?= nl2br(htmlspecialchars($s['commentaire'] ?: 'Aucune observation saisie.')) ?>
+                        </div>
+
+                        <div class="d-flex gap-2">
+                            <a href="dossier_patient.php?id=<?= $s['id_patient'] ?>" class="btn-action btn-folder">
+                                <i class="fa-solid fa-eye"></i> Voir Dossier
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <?php endforeach; ?>
+            <?php else: ?>
+                <div class="suivi-card justify-content-center py-5" style="border-style: dashed; background: #f8fafc; opacity: 0.8;">
+                    <div class="text-center">
+                        <i class="fa-regular fa-calendar-xmark fa-3x mb-3" style="color: #cbd5e1;"></i>
+                        <p class="text-muted">Aucun suivi trouvé pour ces critères.</p>
+                    </div>
+                </div>
+            <?php endif; ?>
         </div>
     </main>
 </div>
+
 </body>
 </html>

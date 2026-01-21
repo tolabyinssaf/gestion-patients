@@ -219,9 +219,7 @@ if ($id_admission) {
                         <button onclick="window.print()" class="btn-print">
                             <i class="fa-solid fa-print me-2"></i>Imprimer le reçu
                         </button>
-                        <a href="encaisser.php?id_facture=<?= $facture['id_facture'] ?>" class="btn-confirm">
-                            <i class="fa-solid fa-check-circle me-2"></i>VALIDER LE RÈGLEMENT
-                        </a>
+                       
                     </div>
                     
                     <div class="text-center mt-4">

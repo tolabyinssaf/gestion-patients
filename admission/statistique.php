@@ -114,7 +114,7 @@ try {
         <a href="../connexio_utilisateur/dashboard_medecin.php"><i class="fa-solid fa-chart-line"></i> Vue Générale</a>
         <a href="../connexio_utilisateur/hospitalisation.php"><i class="fa-solid fa-bed-pulse"></i> Patients Admis</a>
         <a href="../connexio_utilisateur/patients.php"><i class="fa-solid fa-hospital-user"></i> Patients</a>
-        <a href="list.php"><i class="fa-solid fa-file-prescription"></i> Traitements</a>
+        <a href="../traitement/list.php"><i class="fa-solid fa-file-prescription"></i> Traitements</a>
         <a href="../connexio_utilisateur/suivis.php"><i class="fa-solid fa-calendar-check"></i> Consultations</a>
         <h3 style="font-weight: 800;">Analyse & Gestion</h3>
         <a href="../admission/statistique.php" class="active"><i class="fa-solid fa-chart-pie"></i> Statistiques</a>
