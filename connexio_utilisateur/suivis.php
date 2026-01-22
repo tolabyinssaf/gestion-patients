@@ -34,7 +34,8 @@ $stmt = $pdo->prepare("
     FROM suivis s
     JOIN patients p ON s.id_patient = p.id_patient
     WHERE p.id_medecin = ?
-    ORDER BY s.date_suivi DESC
+    ORDER BY CASE WHEN s.status = 'Terminé' THEN 1 ELSE 0 END ASC, 
+        s.date_suivi DESC
 ");
 $stmt->execute([$id_medecin]);
 $suivis = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -288,7 +289,14 @@ $medecin = $stmtMed->fetch(PDO::FETCH_ASSOC);
         </div>
     </div>
 
+    
+
     <div class="timeline">
+        <div style="margin-bottom: 25px;">
+    <input type="text" id="searchInput" placeholder="Rechercher par nom ou prénom..." 
+        style="width: 100%; padding: 12px 18px; border-radius: 12px; border: 1px solid #e2e8f0; font-size: 14px;">
+</div>
+
         <?php if($suivis): ?>
             <?php foreach($suivis as $s): 
                 $dateObj = new DateTime($s['date_suivi']);
@@ -326,6 +334,9 @@ $medecin = $stmtMed->fetch(PDO::FETCH_ASSOC);
                                 <a href="modifier_suivi.php?id=<?= $s['id_suivi'] ?>" class="btn-action">
                                     <i class="fa-solid fa-pen"></i> Modifier
                                 </a>
+                                <a href="#" class="btn-action btn-print" onclick="printSuivi(<?= $s['id_suivi'] ?>); return false;">
+                <i class="fa-solid fa-print"></i> Imprimer
+            </a>
                             <?php endif; ?>
                         </div>
 
@@ -464,6 +475,134 @@ function updateStatuses() {
         }
     });
 }
+
+// FILTRAGE DES CARTES PAR NOM OU PRÉNOM
+$('#searchInput').on('keyup', function() {
+    const query = $(this).val().toLowerCase();
+
+    $('.suivi-card').each(function() {
+        const fullName = $(this).find('.patient-name').text().toLowerCase();
+        if (fullName.includes(query)) {
+            $(this).show();
+        } else {
+            $(this).hide();
+        }
+    });
+
+    // Optionnel : filtrer aussi la chronologie côté droit
+    $('.side-item').each(function() {
+        const sideName = $(this).find('div:first').text().toLowerCase();
+        if (sideName.includes(query)) {
+            $(this).show();
+        } else {
+            $(this).hide();
+        }
+    });
+});
+
+
+function printSuivi(id) {
+    const card = document.querySelector(`.suivi-card[data-id="${id}"]`);
+    if (!card) return;
+
+    // Infos patient
+    const patientName = card.querySelector('.patient-name').innerText;
+    const commentaire = card.querySelector('.commentaire-text').innerHTML;
+
+    // Infos médecin depuis PHP
+    const medecinNom = "Dr. <?= htmlspecialchars($medecin['prenom']." ".$medecin['nom']) ?>";
+    const medecinSpecialite = "<?= htmlspecialchars($medecin['specialite'] ?? 'Médecin généraliste') ?>";
+
+    // Date complète du suivi depuis la carte
+    const dateSuivi = card.querySelector('.suivi-date-box .day').innerText + " " +
+                      card.querySelector('.suivi-date-box .month').innerText + ", " +
+                      new Date().getFullYear();
+
+    // Fenêtre d'impression
+    const printWindow = window.open('', '', 'width=800,height=600');
+    printWindow.document.write(`
+        <html>
+        <head>
+            <title>Imprimer Suivi</title>
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+            <style>
+                body { 
+                    font-family: 'Inter', sans-serif; 
+                    padding: 40px; 
+                    background: #fff; 
+                    color: #111; 
+                    text-align: center; /* Tout centré */
+                }
+                .print-header { 
+                    margin-bottom: 30px; 
+                    border-bottom: 2px solid #0f766e; 
+                    padding-bottom: 20px; 
+                }
+                .print-header h2 { 
+                    margin: 0 0 10px 0; 
+                    font-size: 24px; 
+                    color: #0f766e;
+                }
+                .info { 
+                    margin: 5px 0; 
+                    font-size: 16px; 
+                    font-weight: 500;
+                }
+                .suivi-card { 
+                    display: inline-block; /* centrage horizontal */
+                    text-align: left; /* texte à l'intérieur aligné à gauche */
+                    border: 1px solid #e2e8f0; 
+                    border-radius: 16px; 
+                    padding: 25px; 
+                    margin-top: 20px;
+                    max-width: 600px;
+                    width: 100%;
+                    background: #f9fafb;
+                }
+                .suivi-date-box { 
+                    display: inline-block; 
+                    text-align: center; 
+                    padding: 10px; 
+                    background: #f1f5f9; 
+                    border-radius: 12px; 
+                    margin-bottom: 15px;
+                }
+                .patient-name { 
+                    font-weight: 700; 
+                    font-size: 18px; 
+                    margin-bottom: 10px; 
+                    text-align: center;
+                }
+                .commentaire-text { 
+                    background: #f0fdfa; 
+                    padding: 15px; 
+                    border-radius: 12px; 
+                    border-left: 5px solid #0f766e; 
+                    font-size: 14px;
+                    line-height: 1.6;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="print-header">
+                <h2>Suivi Patient</h2>
+                <div class="info"><strong>Médecin :</strong> ${medecinNom} (${medecinSpecialite})</div>
+                <div class="info"><strong>Date du suivi :</strong> ${dateSuivi}</div>
+                <div class="info"><strong>Patient :</strong> ${patientName}</div>
+            </div>
+
+            <div class="suivi-card">
+                ${commentaire}
+            </div>
+        </body>
+        </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+    printWindow.close();
+}
+
 
 
 </script>

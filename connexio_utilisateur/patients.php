@@ -282,7 +282,9 @@ $patients = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             </td>
                             <td>
                                 <div class="btn-group">
-                                    <a href="dossier_patient.php?id=<?= $p['id_patient'] ?>" class="btn-action btn-dossier">
+                                    
+
+                                    <a href="dossier_patient.php?id_patient=<?= $p['id_patient'] ?>" class="btn-action btn-dossier">
                                         <i class="fa-solid fa-file-waveform"></i> Dossier
                                     </a>
                                     <a href="supprimer_patient.php?id=<?= $p['id_patient'] ?>" class="btn-action btn-delete" 

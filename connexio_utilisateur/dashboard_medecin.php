@@ -356,7 +356,7 @@ $suivis_jour = count($suivis_details);
                         <th>Patient</th>
                         <th>Statut</th>
                         <th>Note / Observation</th>
-                        <th>Heure</th>
+                        
                         <th style="text-align:right;">Actions</th>
                     </tr>
                 </thead>
@@ -380,7 +380,7 @@ $suivis_jour = count($suivis_details);
                         <td style="color:#475569; max-width:250px;">
                             <?= !empty($s['commentaire']) ? htmlspecialchars($s['commentaire']) : '<span class="text-muted">Aucune note</span>' ?>
                         </td>
-                        <td style="font-weight:700;"><i class="fa-regular fa-clock me-1"></i> <?= date('H:i', strtotime($s['date_suivi'])) ?></td>
+                        
                         <td style="text-align:right; display: flex; align-items: center; justify-content: flex-end; gap: 10px;">
                             <a href="dossier_patient.php?id=<?= $s['id_patient'] ?>" class="action-link" title="Dossier"><i class="fa-solid fa-folder-open"></i></a>
                             

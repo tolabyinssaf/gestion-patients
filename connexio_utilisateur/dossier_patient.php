@@ -10,6 +10,8 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'medecin') {
 $id_medecin = $_SESSION['user_id'];
 $id_patient = $_GET['id'] ?? null;
 
+$id_patient = $_POST['id_patient'] ?? $_GET['id'] ?? $_GET['id_patient'] ?? null;
+
 if (!$id_patient) die("Patient non spécifié");
 
 /* Infos patient */
@@ -385,7 +387,7 @@ $today = date('Y-m-d');
                               <tbody>
                                 <?php if($suivis): foreach($suivis as $s): 
                                     // Récupération du statut depuis la base de données
-                                    $statut = !empty($s['statut']) ? trim($s['statut']) : 'En cours';
+                                    $statut = !empty($s['status']) ? trim($s['status']) : 'En cours';
                                     $est_termine = (strtolower($statut) === 'terminé' || strtolower($statut) === 'termine');
                                 ?>
                                 <tr>
@@ -422,12 +424,13 @@ $today = date('Y-m-d');
                                                 </a>
                                             <?php else: ?>
                                                 <!-- Corbeille pour supprimer si statut "Terminé" -->
-                                                <a href="supprimer_suivi.php?id=<?= $s['id_suivi'] ?>&id_patient=<?= $id_patient ?>" 
-                                                   class="btn btn-sm btn-light border-0" 
-                                                   onclick="return confirm('Voulez-vous vraiment supprimer ce suivi terminé ?')"
-                                                   title="Supprimer le suivi">
-                                                    <i class="fa-solid fa-trash text-danger"></i>
-                                                </a>
+                                               <a href="supprimer_suivi.php?id_suivi=<?= $s['id_suivi'] ?>&id_patient=<?= $id_patient ?>" 
+   class="btn btn-sm btn-light border-0" 
+   onclick="return confirm('Voulez-vous vraiment supprimer ce suivi terminé ?');"
+   title="Supprimer le suivi">
+    <i class="fa-solid fa-trash text-danger"></i>
+</a>
+
                                             <?php endif; ?>
                                         </div>
                                     </td>

@@ -15,15 +15,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Démarrer une transaction pour être sûr que tout s'enregistre bien
         $pdo->beginTransaction();
 
+        $stmt_patient = $pdo->prepare("SELECT id_patient FROM admissions WHERE id_admission = ?");
+$stmt_patient->execute([$id_admission]);
+$id_patient = $stmt_patient->fetchColumn();
+
+
         // 2. Générer un numéro de facture unique (Ex: FAC-2026-10)
         $annee = date("Y");
         $num_facture = "FAC-" . $annee . "-" . str_pad($id_admission, 4, "0", STR_PAD_LEFT);
 
         // 3. ENREGISTRER DANS LA TABLE FACTURES
-        $sql_facture = "INSERT INTO factures (id_admission, numero_facture, montant_total, date_facture, mode_paiement, type_couverture, nb_jours) 
-                        VALUES (?, ?, ?, NOW(), ?, ?, ?)";
-        $stmt = $pdo->prepare($sql_facture);
-        $stmt->execute([$id_admission, $num_facture, $montant, $mode, $couverture, $nb_jours]);
+       $sql_facture = "INSERT INTO factures 
+    (id_admission, id_patient, numero_facture, montant_total, date_facture, mode_paiement, type_couverture, nb_jours) 
+    VALUES (?, ?, ?, ?, NOW(), ?, ?, ?)";
+$stmt = $pdo->prepare($sql_facture);
+$stmt->execute([$id_admission, $id_patient, $num_facture, $montant, $mode, $couverture, $nb_jours]);
+
 
         // 4. METTRE À JOUR L'ADMISSION (Clôturer le séjour)
         // On change le statut pour qu'elle n'apparaisse plus comme "En cours"

@@ -19,7 +19,18 @@ $admissions = $pdo->query("
 // 2. KPI
 $kpiStmt = $pdo->query("SELECT * FROM vw_admission_kpi");
 $kpi = $kpiStmt ? $kpiStmt->fetch(PDO::FETCH_ASSOC) : ['total' => 0, 'en_cours' => 0, 'termine' => 0];
-$today = $pdo->query("SELECT COUNT(*) FROM admissions WHERE date_admission = CURDATE()")->fetchColumn();
+
+$total = $pdo->query("SELECT COUNT(*) FROM admissions")->fetchColumn();
+
+// 2️⃣ Total en cours
+$en_cours = $pdo->query("SELECT COUNT(*) FROM admissions WHERE statut = 'En cours'")->fetchColumn();
+
+// 3️⃣ Total terminées
+$termine = $pdo->query("SELECT COUNT(*) FROM admissions WHERE statut = 'Terminée'")->fetchColumn();
+
+// 4️⃣ Total aujourd'hui
+$today = $pdo->query("SELECT COUNT(*) FROM admissions WHERE DATE(date_admission) = CURDATE()")->fetchColumn();
+
 
 // 3. Infos Utilisateur
 if (!isset($_SESSION['id_user'])) { $_SESSION['id_user'] = 1; }
@@ -138,19 +149,19 @@ $services = ['Cardiologie', 'Pédiatrie', 'Chirurgie', 'Général'];
             <div class="col-md-3">
                 <div class="kpi-card shadow-sm">
                     <div class="kpi-icon text-white" style="background: #0d9488"><i class="bi bi-clipboard-data"></i></div>
-                    <div><div class="small text-muted">Total</div><div class="h4 fw-bold mb-0"><?= $kpi['total'] ?></div></div>
+                    <div><div class="small text-muted">Total</div><div class="h4 fw-bold mb-0"><?= $total?></div></div>
                 </div>
             </div>
             <div class="col-md-3">
                 <div class="kpi-card shadow-sm">
                     <div class="kpi-icon bg-dark text-white"><i class="bi bi-heart-pulse"></i></div>
-                    <div><div class="small text-muted">En cours</div><div class="h4 fw-bold mb-0"><?= $kpi['en_cours'] ?></div></div>
+                    <div><div class="small text-muted">En cours</div><div class="h4 fw-bold mb-0"><?= $en_cours?></div></div>
                 </div>
             </div>
             <div class="col-md-3">
                 <div class="kpi-card shadow-sm">
                     <div class="kpi-icon bg-success text-white"><i class="bi bi-check-circle"></i></div>
-                    <div><div class="small text-muted">Terminées</div><div class="h4 fw-bold mb-0"><?= $kpi['termine'] ?></div></div>
+                    <div><div class="small text-muted">Terminées</div><div class="h4 fw-bold mb-0"><?= $termine?></div></div>
                 </div>
             </div>
             <div class="col-md-3">

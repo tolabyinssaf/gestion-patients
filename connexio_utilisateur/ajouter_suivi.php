@@ -9,8 +9,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'medecin') {
 }
 
 $user_id = $_SESSION['user_id'];
-$patient_id = $_GET['id_patient'] ?? $_GET['id'] ?? null;
-
+$patient_id = $_POST['id_patient'] ?? $_GET['id_patient'] ?? $_GET['id'] ?? null;
 if (!$patient_id) die("Patient non spécifié.");
 
 // Infos médecin pour le header et l'en-tête de carte
@@ -204,6 +203,8 @@ if (isset($_POST['ajouter_suivi'])) {
             <?php endif; ?>
 
             <form action="" method="POST" class="form-body">
+                <input type="hidden" name="id_patient" value="<?= htmlspecialchars($patient['id_patient']) ?>">
+
                 <div class="section-separator"><i class="fa-solid fa-clock-rotate-left"></i> Paramètres du suivi</div>
 
                 <div class="row g-4">

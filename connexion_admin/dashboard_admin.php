@@ -39,7 +39,7 @@ for ($m = 1; $m <= 6; $m++) {
 $modes = $pdo->query("SELECT mode_paiement, COUNT(*) as nb FROM factures GROUP BY mode_paiement")->fetchAll(PDO::FETCH_ASSOC);
 $labels_mode = []; $data_mode = [];
 foreach($modes as $m) {
-    $labels_mode[] = $m['mode_paiement'] ?: 'Non défini';
+    $labels_mode[] = $m['mode_paiement'] ?: 'par carte';
     $data_mode[] = $m['nb'];
 }
 
@@ -47,9 +47,9 @@ foreach($modes as $m) {
 $dernieres_factures = $pdo->query("
     SELECT f.*, p.nom, p.prenom 
     FROM factures f
-    JOIN patients p ON f.id_patient = p.id_patient
+    LEFT JOIN patients p ON f.id_patient = p.id_patient
     ORDER BY f.date_facture DESC LIMIT 6
-")->fetchAll();
+")->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <!DOCTYPE html>
@@ -249,7 +249,10 @@ $dernieres_factures = $pdo->query("
                         <?php foreach($dernieres_factures as $f): ?>
                         <tr>
                             <td class="fw-bold text-primary">#<?= $f['numero_facture'] ?></td>
-                            <td class="fw-semibold text-dark"><?= htmlspecialchars($f['prenom'].' '.$f['nom']) ?></td>
+                            <td class="fw-semibold text-dark">
+    <?= htmlspecialchars(($f['prenom'] ?? '—') . ' ' . ($f['nom'] ?? '—')) ?>
+</td>
+
                             <td class="text-muted small"><?= date('d M Y', strtotime($f['date_facture'])) ?></td>
                             <td class="fw-bold text-dark"><?= number_format($f['montant_total'], 2) ?> DH</td>
                             <td>

@@ -11,7 +11,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
 // Requête SQL optimisée avec vos colonnes exactes
 $query = "SELECT f.*, p.nom, p.prenom, p.CIN, p.telephone, p.email
           FROM factures f 
-          JOIN patients p ON f.id_patient = p.id_patient 
+          Left JOIN patients p ON f.id_patient = p.id_patient 
           ORDER BY f.date_facture DESC";
 $stmt = $pdo->prepare($query);
 $stmt->execute();
